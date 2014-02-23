@@ -319,3 +319,51 @@ module SerializeLongTest =
     [<Test>]
     let ``Given Int64.MinValue Then return 0xd48000000000000000``() =
         System.Int64.MinValue |> Serialization.serializeLong |> assertEquivalentTo [| Format.Int64; 0x80uy; 0x00uy; 0x00uy; 0x00uy; 0x00uy; 0x00uy; 0x00uy; 0x00uy |]
+
+[<TestFixture>]
+module SerializeFloatTest =
+    [<Test>]
+    let ``Given 0.0 Then return 0xca00000000`` () =
+        0.0f |> Serialization.serializeFloat |> assertEquivalentTo [| Format.Float; 0x00uy; 0x00uy; 0x00uy; 0x00uy |]
+
+    [<Test>]
+    let ``Given 1.00390625 Then reutnr 0xca3f808000`` () =
+        1.00390625f |> Serialization.serializeFloat |> assertEquivalentTo [| Format.Float; 0x3Fuy; 0x80uy; 0x80uy; 0x00uy |]
+
+    [<Test>]
+    let ``Given -1.0000152587890625 Then return 0xbf800080`` () =
+        -1.0000152587890625f |> Serialization.serializeFloat |> assertEquivalentTo [| Format.Float; 0xBFuy; 0x80uy; 0x00uy; 0x80uy |]
+
+    [<Test>]
+    let ``Given +infinity Then return 0x7f800000`` () =
+        System.Single.PositiveInfinity |> Serialization.serializeFloat |> assertEquivalentTo [| Format.Float; 0x7Fuy; 0x80uy; 0x00uy; 0x00uy |]
+
+    [<Test>]
+    let ``Given -infinity Then return 0xff800000`` () =
+        System.Single.NegativeInfinity |> Serialization.serializeFloat |> assertEquivalentTo [| Format.Float; 0xFFuy; 0x80uy; 0x00uy; 0x00uy |]
+
+[<TestFixture>]
+module SerializeDoubleTest =
+    [<Test>]
+    let ``Given 0.0 Then return 0xcb0000000000000000`` () =
+        0.0 |> Serialization.serializeDouble |> assertEquivalentTo [| Format.Double; 0x00uy; 0x00uy; 0x00uy; 0x00uy; 0x00uy; 0x00uy; 0x00uy; 0x00uy |]
+
+    [<Test>]
+    let ``Given 1.03125 Then return 0xcb3ff0800000000000`` () =
+        1.03125 |> Serialization.serializeDouble |> assertEquivalentTo [| Format.Double; 0x3Fuy; 0xF0uy; 0x80uy; 0x00uy; 0x00uy; 0x00uy; 0x00uy; 0x00uy |]
+
+    [<Test>]
+    let ``Given -1.000001430511474609375 Then return 0xcbbff0000180000000`` () =
+        -1.000001430511474609375 |> Serialization.serializeDouble |> assertEquivalentTo [| Format.Double; 0xBFuy; 0xF0uy; 0x00uy; 0x01uy; 0x80uy; 0x00uy; 0x00uy; 0x00uy |]
+
+    [<Test>]
+    let ``Given 1.000000000015035084288683719933 Then return 0xcb3ff0000000010880`` () =
+        1.000000000015035084288683719933 |> Serialization.serializeDouble |> assertEquivalentTo [| Format.Double; 0x3Fuy; 0xF0uy; 0x00uy; 0x00uy; 0x00uy; 0x01uy; 0x08uy; 0x80uy |]
+
+    [<Test>]
+    let ``Given +infinity Then return 0xcb7ff0000000000000`` () =
+        System.Double.PositiveInfinity |> Serialization.serializeDouble |> assertEquivalentTo [| Format.Double; 0x7Fuy; 0xF0uy; 0x00uy; 0x00uy; 0x00uy; 0x00uy; 0x00uy; 0x00uy |]
+
+    [<Test>]
+    let ``Given -infinity Then return 0xcbfff0000000000000`` () =
+        System.Double.NegativeInfinity |> Serialization.serializeDouble |> assertEquivalentTo [| Format.Double; 0xFFuy; 0xF0uy; 0x00uy; 0x00uy; 0x00uy; 0x00uy; 0x00uy; 0x00uy |]

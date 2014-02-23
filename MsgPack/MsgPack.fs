@@ -11,6 +11,44 @@ type Format =
     static member Int16 = 0xd1uy
     static member Int32 = 0xd2uy
     static member Int64 = 0xd3uy
+    static member Float = 0xcauy
+    static member Double = 0xcbuy
+
+module internal Utility =
+    open System.Runtime.InteropServices
+    [<Struct; StructLayout(LayoutKind.Explicit)>]
+    type internal Float =
+        [<FieldOffset(0)>]val mutable Value: float32
+        [<FieldOffset(0)>][<DefaultValue>]val mutable Byte0: byte
+        [<FieldOffset(1)>][<DefaultValue>]val mutable Byte1: byte
+        [<FieldOffset(2)>][<DefaultValue>]val mutable Byte2: byte
+        [<FieldOffset(3)>][<DefaultValue>]val mutable Byte3: byte
+        member self.ToBytes(isLittleEndian) =
+            if isLittleEndian then [| self.Byte3; self.Byte2; self.Byte1; self.Byte0 |]
+            else [| self.Byte0; self.Byte1; self.Byte2; self.Byte3 |]
+
+    [<Struct; StructLayout(LayoutKind.Explicit)>]
+    type internal Double =
+        [<FieldOffset(0)>]val mutable Value: float
+        [<FieldOffset(0); DefaultValue>]val mutable Byte0: byte
+        [<FieldOffset(1); DefaultValue>]val mutable Byte1: byte
+        [<FieldOffset(2); DefaultValue>]val mutable Byte2: byte
+        [<FieldOffset(3); DefaultValue>]val mutable Byte3: byte
+        [<FieldOffset(4); DefaultValue>]val mutable Byte4: byte
+        [<FieldOffset(5); DefaultValue>]val mutable Byte5: byte
+        [<FieldOffset(6); DefaultValue>]val mutable Byte6: byte
+        [<FieldOffset(7); DefaultValue>]val mutable Byte7: byte
+        member self.ToBytes(isLittleEndian) =
+            if isLittleEndian then [| self.Byte7; self.Byte6; self.Byte5; self.Byte4; self.Byte3; self.Byte2; self.Byte1; self.Byte0|]
+            else [| self.Byte0; self.Byte1; self.Byte2; self.Byte3; self.Byte4; self.Byte5; self.Byte6; self.Byte7 |]
+
+    let convertBigEndianToFloat (value: float32) =
+        let f = Float(Value=value)
+        f.ToBytes(System.BitConverter.IsLittleEndian)
+
+    let convertBigEndianToDouble (value: float) =
+        let d = Double(Value=value)
+        d.ToBytes(System.BitConverter.IsLittleEndian)
 
 module Serialization =
     let serializeBool value =
@@ -151,4 +189,9 @@ module Serialization =
             [| byte value |]
         else
             value |> uint64 |> serializeULong
-                       
+
+    let serializeFloat (value: float32) =
+        Array.append [| Format.Float |] (Utility.convertBigEndianToFloat value)
+
+    let serializeDouble (value: float) =
+        Array.append [| Format.Double |] (Utility.convertBigEndianToDouble value)
