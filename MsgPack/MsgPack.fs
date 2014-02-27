@@ -1,23 +1,23 @@
 ﻿namespace MsgPack
 
 type Format =
-    static member True = 0xc2uy
-    static member False = 0xc3uy
-    static member UInt8 = 0xccuy
-    static member UInt16 = 0xcduy
-    static member UInt32 = 0xceuy
-    static member UInt64 = 0xcfuy
-    static member Int8 = 0xd0uy
-    static member Int16 = 0xd1uy
-    static member Int32 = 0xd2uy
-    static member Int64 = 0xd3uy
-    static member Float = 0xcauy
-    static member Double = 0xcbuy
+    static member True = 0xC2uy
+    static member False = 0xC3uy
+    static member Float32 = 0xCAuy
+    static member Float64 = 0xCBuy
+    static member UInt8 = 0xCCuy
+    static member UInt16 = 0xCDuy
+    static member UInt32 = 0xCEuy
+    static member UInt64 = 0xCFuy
+    static member Int8 = 0xD0uy
+    static member Int16 = 0xD1uy
+    static member Int32 = 0xD2uy
+    static member Int64 = 0xD3uy
 
 module internal Utility =
     open System.Runtime.InteropServices
-    [<Struct; StructLayout(LayoutKind.Explicit)>]
-    type internal Float =
+    [<Struct; StructLayout(LayoutKind.Explicit); CompiledName("Single")>]
+    type internal Float32 =
         [<FieldOffset(0)>]val mutable Value: float32
         [<FieldOffset(0)>][<DefaultValue>]val mutable Byte0: byte
         [<FieldOffset(1)>][<DefaultValue>]val mutable Byte1: byte
@@ -27,8 +27,8 @@ module internal Utility =
             if isLittleEndian then [| self.Byte3; self.Byte2; self.Byte1; self.Byte0 |]
             else [| self.Byte0; self.Byte1; self.Byte2; self.Byte3 |]
 
-    [<Struct; StructLayout(LayoutKind.Explicit)>]
-    type internal Double =
+    [<Struct; StructLayout(LayoutKind.Explicit); CompiledName("Double")>]
+    type internal Float =
         [<FieldOffset(0)>]val mutable Value: float
         [<FieldOffset(0); DefaultValue>]val mutable Byte0: byte
         [<FieldOffset(1); DefaultValue>]val mutable Byte1: byte
@@ -42,29 +42,34 @@ module internal Utility =
             if isLittleEndian then [| self.Byte7; self.Byte6; self.Byte5; self.Byte4; self.Byte3; self.Byte2; self.Byte1; self.Byte0|]
             else [| self.Byte0; self.Byte1; self.Byte2; self.Byte3; self.Byte4; self.Byte5; self.Byte6; self.Byte7 |]
 
-    let convertBigEndianToFloat (value: float32) =
-        let f = Float(Value=value)
+    [<CompiledName("ConvertEndianToSingle")>]
+    let convertEndianToFloat32 (value: float32) =
+        let f = Float32(Value=value)
         f.ToBytes(System.BitConverter.IsLittleEndian)
 
-    let convertBigEndianToDouble (value: float) =
-        let d = Double(Value=value)
+    [<CompiledName("ConvertEndianToDouble")>]
+    let convertEndianToFloat (value: float) =
+        let d = Float(Value=value)
         d.ToBytes(System.BitConverter.IsLittleEndian)
 
-module Serialization =
-    let serializeBool value =
+module Packer =
+    [<CompiledName("PackBool")>]
+    let packBool value =
         if value then
             Format.True
         else
             Format.False
 
-    let serializeByte value =
+    [<CompiledName("PackByte")>]
+    let packByte value =
         if value < (1uy <<< 7) then
             [| byte value |]
         else
             [| Format.UInt8
                byte value |]
 
-    let serializeUShort value =
+    [<CompiledName("PackUShort")>]
+    let packUInt16 value =
         if value < (1us <<< 8) then
             if value < (1us <<< 7) then
                 [| byte value |]
@@ -76,7 +81,8 @@ module Serialization =
                byte (value >>> 8)
                byte ((value <<< 8) >>> 8) |]
 
-    let serializeUInt value =
+    [<CompiledName("PackUInt")>]
+    let packUInt32 value =
         if value < (1u <<< 8) then
             if value < (1u <<< 7) then
                 [| byte value |]
@@ -95,7 +101,8 @@ module Serialization =
                    byte (((value >>> 8) <<< 24) >>> 24)
                    byte ((value <<< 24) >>> 24) |]
 
-    let serializeULong value =
+    [<CompiledName("PackULong")>]
+    let packUInt64 value =
         if value < (1UL <<< 8) then
             if value < (1UL <<< 7)
                 then [| byte value |]
@@ -124,14 +131,16 @@ module Serialization =
                    byte (((value >>> 8) <<< 56) >>> 56)
                    byte ((value <<< 56) >>> 56) |]
 
-    let serializeSByte value =
+    [<CompiledName("PackSByte")>]
+    let packSByte value =
         if value < -(1y <<< 5) then
             [| Format.Int8
                byte value |]
         else
             [| byte value |]
 
-    let serializeShort value =
+    [<CompiledName("PackShort")>]
+    let packInt16 value =
         if value < -(1s <<< 5) then
             if value < -(1s <<< 7) then
                 [| Format.Int16
@@ -144,9 +153,10 @@ module Serialization =
             // fixnum
             [| byte value |]
         else
-            value |> uint16 |> serializeUShort
+            value |> uint16 |> packUInt16
 
-    let serializeInt value =
+    [<CompiledName("PackInt")>]
+    let packInt value =
         if value < -(1 <<< 5) then
             if value < -(1 <<< 15) then
                 [| Format.Int32
@@ -165,9 +175,10 @@ module Serialization =
             // fixnum
             [| byte value |]
         else
-            value |> uint32 |> serializeUInt
+            value |> uint32 |> packUInt32
 
-    let serializeLong value =
+    [<CompiledName("PackLong")>]
+    let packInt64 value =
         if value < -(1L <<< 5) then
             if value < -(1L <<< 15) then
                 if value < -(1L <<< 31) then
@@ -181,17 +192,19 @@ module Serialization =
                        byte (((value >>> 8) <<< 56) >>> 56)
                        byte ((value <<< 56) >>> 56) |]
                 else
-                    value |> int32 |> serializeInt
+                    value |> int32 |> packInt
             else
-                value |> int32 |> serializeInt
+                value |> int32 |> packInt
         elif value < (1L <<< 7) then
             // fixnum
             [| byte value |]
         else
-            value |> uint64 |> serializeULong
+            value |> uint64 |> packUInt64
 
-    let serializeFloat (value: float32) =
-        Array.append [| Format.Float |] (Utility.convertBigEndianToFloat value)
+    [<CompiledName("PackSingle")>]
+    let packFloat32 (value: float32) =
+        Array.append [| Format.Float32 |] (Utility.convertEndianToFloat32 value)
 
-    let serializeDouble (value: float) =
-        Array.append [| Format.Double |] (Utility.convertBigEndianToDouble value)
+    [<CompiledName("PackDouble")>]
+    let packFloat (value: float) =
+        Array.append [| Format.Float64 |] (Utility.convertEndianToFloat value)
