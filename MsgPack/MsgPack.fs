@@ -1,6 +1,7 @@
 ﻿namespace MsgPack
 
 type Format =
+    static member Nil = 0xC0uy
     static member True = 0xC2uy
     static member False = 0xC3uy
     static member Float32 = 0xCAuy
@@ -56,9 +57,9 @@ module Packer =
     [<CompiledName("PackBool")>]
     let packBool value =
         if value then
-            Format.True
+            [| Format.True |]
         else
-            Format.False
+            [| Format.False |]
 
     [<CompiledName("PackByte")>]
     let packByte value =
@@ -208,3 +209,7 @@ module Packer =
     [<CompiledName("PackDouble")>]
     let packFloat (value: float) =
         Array.append [| Format.Float64 |] (Utility.convertEndianToFloat value)
+
+    [<CompiledName("PackNil")>]
+    let packNil () =
+        [| Format.Nil |]
