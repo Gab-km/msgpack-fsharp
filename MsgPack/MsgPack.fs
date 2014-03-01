@@ -14,6 +14,9 @@ type Format =
     static member Int16 = 0xD1uy
     static member Int32 = 0xD2uy
     static member Int64 = 0xD3uy
+    static member Str8 = 0xD9uy
+    static member Str16 = 0xDAuy
+    static member Str32 = 0xDBuy
 
 module internal Utility =
     open System.Runtime.InteropServices
@@ -213,3 +216,41 @@ module Packer =
     [<CompiledName("PackNil")>]
     let packNil () =
         [| Format.Nil |]
+
+    [<CompiledName("PackString")>]
+    let packString (value: string) =
+        let bytes = System.Text.Encoding.UTF8.GetBytes(value)
+        let length = bytes.Length
+        let (|FixStr|_|) (length: int) =
+            if length < 32 then Some(length)
+            else None
+        let (|Str8|_|) (length: int) =
+            if length < 0xFF then Some(length)
+            else None
+        let (|Str16|_|) (length: int) =
+            if length < 0xFFFF then Some(length)
+            else None
+        (* For now, there is no necessity to think about the string whose length is greater than 2^32-1.
+        let (|Str32|_|) (length: int) =
+            if length < 0xFFFFFFFF then Some(length)
+            else None*)
+        match length with
+        | FixStr length -> Array.append
+                                [| byte (160 + length) |]
+                                bytes       // string whose length is upto 31.
+        | Str8 length   -> Array.append
+                                [| Format.Str8
+                                   byte length |]
+                                bytes       // string whose length is upto 2^8-1.
+        | Str16 length  -> Array.append
+                                [| Format.Str16
+                                   byte ((length &&& 0xFF00) >>> 8)
+                                   byte (length &&& 0x00FF) |]
+                                bytes       // string whose length is upto 2^16-1.
+        | _             -> Array.append
+                                [| Format.Str32
+                                   byte ((length &&& 0xFF000000) >>> 24)
+                                   byte ((length &&& 0x00FF0000) >>> 16)
+                                   byte ((length &&& 0x0000FF00) >>> 8)
+                                   byte (length &&& 0x000000FF) |]
+                                bytes       // string whose length is greater than 2^16-1.

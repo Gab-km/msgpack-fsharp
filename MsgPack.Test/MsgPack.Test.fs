@@ -5,6 +5,7 @@ open MsgPack
 
 module TestExtensions =
 
+    let assertEqualTo<'a> expected (actual: 'a) = Assert.That(actual, Is.EqualTo(expected))
     let assertEquivalentTo<'a> expected (actual: 'a) = Assert.That(actual, Is.EquivalentTo(expected))
 
 open TestExtensions
@@ -372,3 +373,27 @@ module PackNilTest =
     [<Test>]
     let ``When packNil Then return 0xC0`` () =
         Packer.packNil() |> assertEquivalentTo [| 0xC0uy |]
+
+[<TestFixture>]
+module PackStringTest =
+    [<Test>]
+    let ``Given "compact" Then return 0xA7636F6D70616374`` () =
+        "compact" |> Packer.packString |> assertEquivalentTo [| 0xA7uy; 0x63uy; 0x6Fuy; 0x6Duy; 0x70uy; 0x61uy; 0x63uy; 0x74uy |]
+
+    [<Test>]
+    let ``Given "The quick brown fox jumps over the lazy dog"(the length is 43) Then return byte[] and its format header is 0xD9 and its length is 45`` () =
+        let sut = "The quick brown fox jumps over the lazy dog" |> Packer.packString
+        sut.Length |> assertEqualTo 45
+        sut.[0..1] |> assertEquivalentTo [| 0xD9uy; 0x2Buy |]
+
+    [<Test>]
+    let ``Given 258-length string Then return byte[] and its format header is 0xDA and its length is 261`` () =
+        let sut = System.String('a', 258) |> Packer.packString
+        sut.Length |> assertEqualTo 261
+        sut.[0..2] |> assertEquivalentTo [| 0xDAuy; 0x01uy; 0x02uy |]
+
+    [<Test>]
+    let ``Given 16909060-length string Then return byte[] and its format header is 0xDB and its length is 16909065`` () =
+        let sut = System.String('a', 16909060) |> Packer.packString
+        sut.Length |> assertEqualTo 16909065
+        sut.[0..4] |> assertEquivalentTo [| 0xDBuy; 0x01uy; 0x02uy; 0x03uy; 0x04uy |]
