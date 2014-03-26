@@ -397,3 +397,24 @@ module PackStringTest =
         let sut = System.String('a', 16909060) |> Packer.packString
         sut.Length |> assertEqualTo 16909065
         sut.[0..4] |> assertEquivalentTo [| 0xDBuy; 0x01uy; 0x02uy; 0x03uy; 0x04uy |]
+
+[<TestFixture>]
+module PackArrayTest =
+    [<Test>]
+    let ``Given UInt8 array of [| 0 1 2 3 |] When pack Then return 0x9400010203`` () =
+        let sut = Value.Array [| Value.UInt8(0uy); Value.UInt8(1uy); Value.UInt8(2uy); Value.UInt8(3uy) |] |> Packer.pack
+        sut |> assertEquivalentTo [| 0x94uy; 0x00uy; 0x01uy; 0x02uy; 0x03uy |]
+
+    [<Test>]
+    let ``Given a 16-length Bool array of [| true .. true |] When pack Then return byte[] and its format header is 0xDC and its length is 19`` () =
+        let sut = Array.create 16 (Value.Bool true) |> fun arr -> Value.Array arr |> Packer.pack
+        sut.Length |> assertEqualTo 19
+        sut.[0..2] |> assertEquivalentTo [| 0xDCuy; 0x00uy; 0x10uy |]
+        sut.[3..(sut.Length-1)] |> assertEquivalentTo (Array.create 16 0xC2uy)
+
+    [<Test>]
+    let ``Given a 65536-length String array of [| 'a' .. 'a' |] When pack Then return byte[] and its format header is 0xDD and its length is 131077`` () =
+        let sut = Array.create 65536 (Value.String "a") |> fun arr -> Value.Array arr |> Packer.pack
+        sut.Length |> assertEqualTo 131077
+        sut.[0..4] |> assertEquivalentTo [| 0xDDuy; 0x00uy; 0x01uy; 0x00uy; 0x00uy |]
+        //sut.[5..(sut.Length-1)] |> assertEquivalentTo ((Array.create 65536 [| 0xA1uy; 0x61uy |]) |> Array.collect id)

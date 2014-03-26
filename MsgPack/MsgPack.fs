@@ -1,5 +1,22 @@
 ﻿namespace MsgPack
 
+type Value<'T when 'T : comparison> =
+    | Nil
+    | Bool of bool
+    | Float32 of float32
+    | Float64 of float
+    | UInt8 of byte
+    | UInt16 of uint16
+    | UInt32 of uint32
+    | UInt64 of uint64
+    | Int8 of sbyte
+    | Int16 of int16
+    | Int32 of int
+    | Int64 of int64
+    | String of string
+    | Array of Value<'T> []
+    | Map of Map<Value<'T>, Value<'T>>
+
 type Format =
     static member Nil = 0xC0uy
     static member True = 0xC2uy
@@ -17,6 +34,8 @@ type Format =
     static member Str8 = 0xD9uy
     static member Str16 = 0xDAuy
     static member Str32 = 0xDBuy
+    static member Array16 = 0xDCuy
+    static member Array32 = 0xDDuy
 
 module internal Utility =
     open System.Runtime.InteropServices
@@ -254,3 +273,37 @@ module Packer =
                                    byte ((length &&& 0x0000FF00) >>> 8)
                                    byte (length &&& 0x000000FF) |]
                                 bytes       // string whose length is greater than 2^16-1.
+
+    let rec pack = function
+        | Value.Nil -> packNil()
+        | Value.Bool b -> packBool b
+        | Value.Float32 f -> packFloat32 f
+        | Value.Float64 f -> packFloat f
+        | Value.UInt8 u -> packByte u
+        | Value.UInt16 u -> packUInt16 u
+        | Value.UInt32 u -> packUInt32 u
+        | Value.UInt64 u -> packUInt64 u
+        | Value.Int8 i -> packSByte i
+        | Value.Int16 i -> packInt16 i
+        | Value.Int32 i -> packInt i
+        | Value.Int64 i -> packInt64 i
+        | Value.String s -> packString s
+        | Value.Array arr ->
+            let fmapped = Array.collect pack arr
+            let length = arr.Length
+            if length <= 15 then Array.append
+                                    [| byte (0b10010000 + length) |]
+                                    fmapped
+            elif length <= 65535 then Array.append
+                                        [| Format.Array16
+                                           byte ((length &&& 0xFF00) >>> 8)
+                                           byte (length &&& 0x00FF) |]
+                                        fmapped
+            else Array.append
+                    [| Format.Array32
+                       byte ((length &&& 0xFF000000) >>> 24)
+                       byte ((length &&& 0x00FF0000) >>> 16)
+                       byte ((length &&& 0x0000FF00) >>> 8)
+                       byte (length &&& 0x000000FF) |]
+                    fmapped
+        | Value.Map m -> [||]
