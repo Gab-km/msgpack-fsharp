@@ -1,6 +1,6 @@
 ﻿namespace MsgPack
 
-type Value<'T when 'T : comparison> =
+type Value =
     | Nil
     | Bool of bool
     | Float32 of float32
@@ -14,13 +14,15 @@ type Value<'T when 'T : comparison> =
     | Int32 of int
     | Int64 of int64
     | String of string
-    | Array of Value<'T> []
-    | Map of Map<Value<'T>, Value<'T>>
+    | Bin of byte []
+    | Array of Value []
+    | Map of Map<Value, Value>
+    | Ext of int * byte []
 
 type Format =
     static member Nil = 0xC0uy
-    static member True = 0xC2uy
-    static member False = 0xC3uy
+    static member False = 0xC2uy
+    static member True = 0xC3uy
     static member Float32 = 0xCAuy
     static member Float64 = 0xCBuy
     static member UInt8 = 0xCCuy
@@ -36,6 +38,8 @@ type Format =
     static member Str32 = 0xDBuy
     static member Array16 = 0xDCuy
     static member Array32 = 0xDDuy
+    static member Map16 = 0xDEuy
+    static member Map32 = 0xDFuy
 
 module internal Utility =
     open System.Runtime.InteropServices
@@ -288,6 +292,7 @@ module Packer =
         | Value.Int32 i -> packInt i
         | Value.Int64 i -> packInt64 i
         | Value.String s -> packString s
+        | Value.Bin b -> [||]
         | Value.Array arr ->
             let fmapped = Array.collect pack arr
             let length = arr.Length
@@ -306,4 +311,22 @@ module Packer =
                        byte ((length &&& 0x0000FF00) >>> 8)
                        byte (length &&& 0x000000FF) |]
                     fmapped
-        | Value.Map m -> [||]
+        | Value.Map m ->
+            let length = m.Count
+            let flatten = Map.toArray m |> Array.collect (fun (k, v) -> Array.append (pack k) (pack v))
+            if length <= 15 then Array.append
+                                    [| byte (0b10000000 + length) |]
+                                    flatten
+            elif length <= 65535 then Array.append
+                                        [| Format.Map16
+                                           byte ((length &&& 0xFF00) >>> 8)
+                                           byte (length &&& 0x00FF) |]
+                                        flatten
+            else Array.append
+                    [| Format.Map32
+                       byte ((length &&& 0xFF000000) >>> 24)
+                       byte ((length &&& 0x00FF0000) >>> 16)
+                       byte ((length &&& 0x0000FF00) >>> 8)
+                       byte (length &&& 0x000000FF) |]
+                    flatten
+        | Value.Ext (i, b) -> [||]
