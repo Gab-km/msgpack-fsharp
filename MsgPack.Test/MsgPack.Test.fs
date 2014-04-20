@@ -399,6 +399,32 @@ module PackStringTest =
         sut.[0..4] |> assertEquivalentTo [| 0xDBuy; 0x01uy; 0x02uy; 0x03uy; 0x04uy |]
 
 [<TestFixture>]
+module PackBinTest =
+    [<Test>]
+    let ``Given [| 0 .. 254 |] When packBin Then return byte[] and its format header is 0xC4 and its length is 257`` () =
+        let sut = [| 0uy .. 254uy |] |> Packer.packBin
+        sut.Length |> assertEqualTo 257
+        sut.[0..1] |> assertEquivalentTo [| 0xC4uy; 0xFFuy |]
+
+    [<Test>]
+    let ``Given [| 0 .. 255 |] When packBin Then return byte[] and its format header is 0xC5 and its length is 259`` () =
+        let sut = [| 0uy .. 255uy |] |> Packer.packBin
+        sut.Length |> assertEqualTo 259
+        sut.[0..2] |> assertEquivalentTo [| 0xC5uy; 0x01uy; 0x00uy |]
+
+    [<Test>]
+    let ``Given 65535-length bin array When packBin Then return byte[] and its format header is 0xC5 and its length is 65538`` () =
+        let sut = Array.create 65535 0uy |> Packer.packBin
+        sut.Length |> assertEqualTo 65538
+        sut.[0..2] |> assertEquivalentTo [| 0xC5uy; 0xFFuy; 0xFFuy |]
+
+    [<Test>]
+    let ``Given 65536-length bin array When packBin Then return byte[] and its format header is 0xC6 and its length is 65541`` () =
+        let sut = Array.create 65536 0uy |> Packer.packBin
+        sut.Length |> assertEqualTo 65541
+        sut.[0..4] |> assertEquivalentTo [| 0xC6uy; 0x00uy; 0x01uy; 0x00uy; 0x00uy |]
+
+[<TestFixture>]
 module PackArrayTest =
     [<Test>]
     let ``Given UInt8 array of [| 0 1 2 3 |] When pack Then return 0x9400010203`` () =

@@ -23,6 +23,9 @@ type Format =
     static member Nil = 0xC0uy
     static member False = 0xC2uy
     static member True = 0xC3uy
+    static member Bin8 = 0xC4uy
+    static member Bin16 = 0xC5uy
+    static member Bin32 = 0xC6uy
     static member Ext8 = 0xC7uy
     static member Ext16 = 0xC8uy
     static member Ext32 = 0xC9uy
@@ -286,6 +289,23 @@ module Packer =
                                    byte (length &&& 0x000000FF) |]
                                 bytes       // string whose length is greater than 2^16-1.
 
+    [<CompiledName("PackBinary")>]
+    let packBin (bs: byte[]) =
+        let length = bs.Length
+        if length <= 255 then Array.append [| Format.Bin8; byte(length) |] bs
+        elif length <= 65535 then Array.append
+                                    [| Format.Bin16
+                                       byte ((length &&& 0xFF00) >>> 8)
+                                       byte (length &&& 0x00FF) |]
+                                    bs
+        else Array.append
+                [| Format.Bin32
+                   byte ((length &&& 0xFF000000) >>> 24)
+                   byte ((length &&& 0x00FF0000) >>> 16)
+                   byte ((length &&& 0x0000FF00) >>> 8)
+                   byte (length &&& 0x000000FF) |]
+                bs
+
     [<CompiledName("PackExtended")>]
     let packExt (t: sbyte) (bs: byte[]) =
         let length = bs.Length
@@ -324,7 +344,7 @@ module Packer =
         | Value.Int32 i -> packInt i
         | Value.Int64 i -> packInt64 i
         | Value.String s -> packString s
-        | Value.Bin b -> [||]
+        | Value.Bin b -> packBin b
         | Value.Array arr ->
             let fmapped = Array.collect pack arr
             let length = arr.Length
