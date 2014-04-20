@@ -330,6 +330,7 @@ module Packer =
                    byte (t) |]
                 bs
 
+    [<CompiledName("Pack")>]
     let rec pack = function
         | Value.Nil -> packNil()
         | Value.Bool b -> packBool b
