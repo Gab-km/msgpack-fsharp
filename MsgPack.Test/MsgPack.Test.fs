@@ -449,3 +449,69 @@ module PackMapTest =
         let sut = [| for i in 1u .. 65536u -> (Value.UInt32(i), Value.Bool(i % 2u = 0u)) |] |> Map.ofArray |> Value.Map |> Packer.pack
         sut.Length |> assertEqualTo 261769
         sut.[0..4] |> assertEquivalentTo [| 0xDFuy; 0x00uy; 0x01uy; 0x00uy; 0x00uy |]
+
+[<TestFixture>]
+module PackExtTest =
+    [<Test>]
+    let ``Given (1, [| 0 |]) When packExt Then return 0xD40100`` () =
+        (1y, [| 0uy |]) ||> Packer.packExt |> assertEquivalentTo [| 0xD4uy; 0x01uy; 0x00uy |]
+
+    [<Test>]
+    let ``Given (2, [| 0; 1 |]) When packExt Then return 0xD5020001`` () =
+        (2y, [| 0uy; 1uy |]) ||> Packer.packExt |> assertEquivalentTo [| 0xD5uy; 0x02uy; 0x00uy; 0x01uy |]
+
+    [<Test>]
+    let ``Given (3, [| 0; 1; 2 |]) When packExt Then return 0xD603000102`` () =
+        (3y, [| 0uy; 1uy; 2uy |]) ||> Packer.packExt |> assertEquivalentTo [| 0xD6uy; 0x03uy; 0x00uy; 0x01uy; 0x02uy |]
+
+    [<Test>]
+    let ``Given (4, [| 0; 1; 2; 3 |]) When packExt Then return 0xD60400010203`` () =
+        (4y, [| 0uy; 1uy; 2uy; 3uy |]) ||> Packer.packExt |> assertEquivalentTo [| 0xD6uy; 0x04uy; 0x00uy; 0x01uy; 0x02uy; 0x03uy |]
+
+    [<Test>]
+    let ``Given (5, [| 0 .. 4 |]) When packExt Then return 0xD7050001020304`` () =
+        (5y, [| 0uy .. 4uy |]) ||> Packer.packExt |> assertEquivalentTo [| 0xD7uy; 0x05uy; 0x00uy; 0x01uy; 0x02uy; 0x03uy; 0x04uy |]
+
+    [<Test>]
+    let ``Given (6, [| 0 .. 7 |]) When packExt Then return 0xD70600010120304050607`` () =
+        (6y, [| 0uy .. 7uy |]) ||> Packer.packExt |> assertEquivalentTo [| 0xD7uy; 0x06uy; 0x00uy; 0x01uy; 0x02uy; 0x03uy; 0x04uy; 0x05uy; 0x06uy; 0x07uy |]
+
+    [<Test>]
+    let ``Given (7, [| 0 .. 8 |]) When packExt Then return 0xD807000102030405060708`` () =
+        (7y, [| 0uy .. 8uy |]) ||> Packer.packExt |> assertEquivalentTo [| 0xD8uy; 0x07uy; 0x00uy; 0x01uy; 0x02uy; 0x03uy
+                                                                           0x04uy; 0x05uy; 0x06uy; 0x07uy; 0x08uy |]
+
+    [<Test>]
+    let ``Given (8, [| 0 .. 15 |]) When packExt Then return 0xD808000102030405060708090A0B0C0D0E0F`` () =
+        (8y, [| 0uy .. 15uy |]) ||> Packer.packExt |> assertEquivalentTo [| 0xD8uy; 0x08uy; 0x00uy; 0x01uy; 0x02uy; 0x03uy; 0x04uy; 0x05uy; 0x06uy
+                                                                            0x07uy; 0x08uy; 0x09uy; 0x0Auy; 0x0Buy; 0x0Cuy; 0x0Duy; 0x0Euy; 0x0Fuy |] 
+
+    [<Test>]
+    let ``Given (9, [| 0 .. 16 |]) When packExt Then return byte[] and its format header is 0xC7 and its length is 20`` () =
+        let sut = (9y, [| 0uy .. 16uy |]) ||> Packer.packExt
+        sut.Length |> assertEqualTo 20
+        sut.[0..1] |> assertEquivalentTo [| 0xC7uy; 0x11uy |]
+
+    [<Test>]
+    let ``Given (10, [| 0 .. 254 |]) When packExt Then return byte[] and its format header is 0xC7 and its length is 258`` () =
+        let sut = (10y, [| 0uy .. 254uy |]) ||> Packer.packExt
+        sut.Length |> assertEqualTo 258
+        sut.[0..1] |> assertEquivalentTo [| 0xC7uy; 0xFFuy |]
+
+    [<Test>]
+    let ``Given (11, [| 0 .. 255 |]) When packExt Then return byte[] and its format header is 0xC8 and its length is 260`` () =
+        let sut = (11y, [| 0uy .. 255uy |]) ||> Packer.packExt
+        sut.Length |> assertEqualTo 260
+        sut.[0..2] |> assertEquivalentTo [| 0xC8uy; 0x01uy; 0x00uy |]
+
+    [<Test>]
+    let ``Given (12, 65535-length array) When packExt Then return byte[] and its format header is 0xC8 and its length is 65539`` () =
+        let sut = (12y, (Array.create 65535 0uy)) ||> Packer.packExt
+        sut.Length |> assertEqualTo 65539
+        sut.[0..2] |> assertEquivalentTo [| 0xC8uy; 0xFFuy; 0xFFuy |]
+
+    [<Test>]
+    let ``Given (13, 65536-length array) When packExt Then return byte[] and its format header is 0xC9 and its length is 65542`` () =
+        let sut = (13y, (Array.create 65536 0uy)) ||> Packer.packExt
+        sut.Length |> assertEqualTo 65542
+        sut.[0..4] |> assertEquivalentTo [| 0xC9uy; 0x00uy; 0x01uy; 0x00uy; 0x00uy |]

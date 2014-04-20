@@ -17,12 +17,15 @@ type Value =
     | Bin of byte []
     | Array of Value []
     | Map of Map<Value, Value>
-    | Ext of int * byte []
+    | Ext of sbyte * byte []
 
 type Format =
     static member Nil = 0xC0uy
     static member False = 0xC2uy
     static member True = 0xC3uy
+    static member Ext8 = 0xC7uy
+    static member Ext16 = 0xC8uy
+    static member Ext32 = 0xC9uy
     static member Float32 = 0xCAuy
     static member Float64 = 0xCBuy
     static member UInt8 = 0xCCuy
@@ -33,6 +36,11 @@ type Format =
     static member Int16 = 0xD1uy
     static member Int32 = 0xD2uy
     static member Int64 = 0xD3uy
+    static member FixExt1 = 0xD4uy
+    static member FixExt2 = 0xD5uy
+    static member FixExt4 = 0xD6uy
+    static member FixExt8 = 0xD7uy
+    static member FixExt16 = 0xD8uy
     static member Str8 = 0xD9uy
     static member Str16 = 0xDAuy
     static member Str32 = 0xDBuy
@@ -278,6 +286,30 @@ module Packer =
                                    byte (length &&& 0x000000FF) |]
                                 bytes       // string whose length is greater than 2^16-1.
 
+    [<CompiledName("PackExtended")>]
+    let packExt (t: sbyte) (bs: byte[]) =
+        let length = bs.Length
+        if length = 1 then Array.append [| Format.FixExt1; byte(t) |] bs
+        elif length = 2 then Array.append [| Format.FixExt2; byte(t) |] bs
+        elif 3 <= length && length <= 4 then Array.append [| Format.FixExt4; byte(t) |] bs
+        elif 5 <= length && length <= 8 then Array.append [| Format.FixExt8; byte(t) |] bs
+        elif 9 <= length && length <= 16 then Array.append [| Format.FixExt16; byte(t) |] bs
+        elif length <= 255 then Array.append [| Format.Ext8; byte(length); byte(t) |] bs
+        elif length <= 65535 then Array.append
+                                    [| Format.Ext16
+                                       byte ((length &&& 0xFF00) >>> 8)
+                                       byte (length &&& 0x00FF)
+                                       byte (t) |]
+                                    bs
+        else Array.append
+                [| Format.Ext32
+                   byte ((length &&& 0xFF000000) >>> 24)
+                   byte ((length &&& 0x00FF0000) >>> 16)
+                   byte ((length &&& 0x0000FF00) >>> 8)
+                   byte (length &&& 0x000000FF)
+                   byte (t) |]
+                bs
+
     let rec pack = function
         | Value.Nil -> packNil()
         | Value.Bool b -> packBool b
@@ -329,4 +361,4 @@ module Packer =
                        byte ((length &&& 0x0000FF00) >>> 8)
                        byte (length &&& 0x000000FF) |]
                     flatten
-        | Value.Ext (i, b) -> [||]
+        | Value.Ext (i, b) -> packExt i b
