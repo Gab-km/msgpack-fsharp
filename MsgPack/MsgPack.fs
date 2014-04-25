@@ -18,6 +18,26 @@ type Value =
     | Array of Value []
     | Map of Map<Value, Value>
     | Ext of sbyte * byte []
+    //TODO: implement ToString method
+    override self.ToString() =
+        match self with
+        | Nil -> "Nil"
+        | Bool (b) -> "Bool " + (b.ToString())
+        | Float32 (f) -> "Float32 " + (f.ToString())
+        | Float64 (d) -> "Float64 " + (d.ToString())
+        | UInt8 (u) -> "UInt8 " + (u.ToString())
+        | UInt16 (u) -> "UInt16 " + (u.ToString())
+        | UInt32 (u) -> "UInt32 " + (u.ToString())
+        | UInt64 (u) -> "UInt64 " + (u.ToString())
+        | Int8 (i) -> "Int8 " + (i.ToString())
+        | Int16 (i) -> "Int16 " + (i.ToString())
+        | Int32 (i) -> "Int32 " + (i.ToString())
+        | Int64 (i) -> "Int64 " + (i.ToString())
+        | String (s) -> "String " + s
+        | Bin (bs) -> sprintf "Bin %A" bs
+        | Array (ar) -> sprintf "Array %A" ar
+        | Map (m) -> "Map " + (m.ToString())
+        | Ext (key, value) -> "Ext " + (key, value).ToString()
 
 type Format =
     static member Nil = 0xC0uy
@@ -80,15 +100,69 @@ module internal Utility =
             if isLittleEndian then [| self.Byte7; self.Byte6; self.Byte5; self.Byte4; self.Byte3; self.Byte2; self.Byte1; self.Byte0|]
             else [| self.Byte0; self.Byte1; self.Byte2; self.Byte3; self.Byte4; self.Byte5; self.Byte6; self.Byte7 |]
 
-    [<CompiledName("ConvertEndianToSingle")>]
-    let convertEndianToFloat32 (value: float32) =
+    [<CompiledName("ConvertEndianFromSingleToBytes")>]
+    let convertEndianFromFloat32ToBytes (value: float32) =
         let f = Float32(Value=value)
         f.ToBytes(System.BitConverter.IsLittleEndian)
 
-    [<CompiledName("ConvertEndianToDouble")>]
-    let convertEndianToFloat (value: float) =
+    [<CompiledName("ConvertEndianFromDoubleToBytes")>]
+    let convertEndianFromFloatToBytes (value: float) =
         let d = Float(Value=value)
         d.ToBytes(System.BitConverter.IsLittleEndian)
+
+    [<CompiledName("ConvertEndianFromBytesToSingle")>]
+    let convertEndianFromBytesToFloat32 (bs: byte[]) =
+        let f =
+            if System.BitConverter.IsLittleEndian then
+                Float32(
+                    Byte0 = (if bs.Length >= 4 then bs.[3] else 0uy),
+                    Byte1 = (if bs.Length >= 3 then bs.[2] else 0uy),
+                    Byte2 = (if bs.Length >= 2 then bs.[1] else 0uy),
+                    Byte3 = (if bs.Length >= 1 then bs.[0] else 0uy))
+            else
+                Float32(
+                    Byte0 = (if bs.Length >= 1 then bs.[0] else 0uy),
+                    Byte1 = (if bs.Length >= 2 then bs.[1] else 0uy),
+                    Byte2 = (if bs.Length >= 3 then bs.[2] else 0uy),
+                    Byte3 = (if bs.Length >= 4 then bs.[3] else 0uy))
+        f.Value
+
+    [<CompiledName("ConvertEndianFromBytesToDouble")>]
+    let convertEndianFromBytesToFloat (bs: byte[]) =
+        let d =
+            if System.BitConverter.IsLittleEndian then
+                Float(
+                    Byte0 = (if bs.Length >= 8 then bs.[7] else 0uy),
+                    Byte1 = (if bs.Length >= 7 then bs.[6] else 0uy),
+                    Byte2 = (if bs.Length >= 6 then bs.[5] else 0uy),
+                    Byte3 = (if bs.Length >= 5 then bs.[4] else 0uy),
+                    Byte4 = (if bs.Length >= 4 then bs.[3] else 0uy),
+                    Byte5 = (if bs.Length >= 3 then bs.[2] else 0uy),
+                    Byte6 = (if bs.Length >= 2 then bs.[1] else 0uy),
+                    Byte7 = (if bs.Length >= 1 then bs.[0] else 0uy))
+            else
+                Float(
+                    Byte0 = (if bs.Length >= 1 then bs.[0] else 0uy),
+                    Byte1 = (if bs.Length >= 2 then bs.[1] else 0uy),
+                    Byte2 = (if bs.Length >= 3 then bs.[2] else 0uy),
+                    Byte3 = (if bs.Length >= 4 then bs.[3] else 0uy),
+                    Byte4 = (if bs.Length >= 5 then bs.[4] else 0uy),
+                    Byte5 = (if bs.Length >= 6 then bs.[5] else 0uy),
+                    Byte6 = (if bs.Length >= 7 then bs.[6] else 0uy),
+                    Byte7 = (if bs.Length >= 8 then bs.[7] else 0uy))
+        d.Value
+
+    let seq_prepend source element =
+        seq {
+            yield element
+            yield! source
+        }
+
+    let seq_append source element =
+        seq {
+            yield! source
+            yield element
+        }
 
 module Packer =
     [<CompiledName("PackBool")>]
@@ -241,11 +315,11 @@ module Packer =
 
     [<CompiledName("PackSingle")>]
     let packFloat32 (value: float32) =
-        Array.append [| Format.Float32 |] (Utility.convertEndianToFloat32 value)
+        Array.append [| Format.Float32 |] (Utility.convertEndianFromFloat32ToBytes value)
 
     [<CompiledName("PackDouble")>]
     let packFloat (value: float) =
-        Array.append [| Format.Float64 |] (Utility.convertEndianToFloat value)
+        Array.append [| Format.Float64 |] (Utility.convertEndianFromFloatToBytes value)
 
     [<CompiledName("PackNil")>]
     let packNil () =
@@ -332,6 +406,7 @@ module Packer =
 
     [<CompiledName("Pack")>]
     let rec pack = function
+        //TODO: change signature to seq<Value> -> byte[]
         | Value.Nil -> packNil()
         | Value.Bool b -> packBool b
         | Value.Float32 f -> packFloat32 f
@@ -383,3 +458,123 @@ module Packer =
                        byte (length &&& 0x000000FF) |]
                     flatten
         | Value.Ext (i, b) -> packExt i b
+
+module Unpacker =
+    [<CompiledName("Unpack")>]
+    let unpack (bs: byte[]) =
+        let rec _unpack (bs: byte[]) (vs: seq<Value>) =
+            if bs.Length = 0 then vs
+            else
+                let header = bs.[0]
+                if (header &&& 0b10000000uy) = 0uy then
+                    Utility.seq_append
+                        vs
+                        (Value.UInt8 header)
+                    |> _unpack bs.[1..]
+                elif (header = Format.Nil) then
+                    Utility.seq_append
+                        vs
+                        Value.Nil
+                    |> _unpack bs.[1..]
+                elif (header = Format.False) then
+                    Utility.seq_append
+                        vs
+                        (Value.Bool false)
+                    |> _unpack bs.[1..]
+                elif (header = Format.True) then
+                    Utility.seq_append
+                        vs
+                        (Value.Bool true)
+                    |> _unpack bs.[1..]
+                elif (header = Format.Float32) && (bs.Length >= 5) then
+                    Utility.seq_append
+                        vs
+                        (Utility.convertEndianFromBytesToFloat32(bs.[1..4])
+                         |> Value.Float32)
+                    |> _unpack bs.[5..]
+                elif (header = Format.Float64) && (bs.Length >= 9) then
+                    Utility.seq_append
+                        vs
+                        (Utility.convertEndianFromBytesToFloat(bs.[1..8])
+                         |> Value.Float64)
+                    |> _unpack bs.[9..]
+                elif (header = Format.UInt8) && (bs.Length >= 2) then
+                    Utility.seq_append
+                        vs
+                        (Value.UInt8 bs.[1])
+                    |> _unpack bs.[2..]
+                elif (header = Format.UInt16) && (bs.Length >= 3) then
+                    Utility.seq_append
+                        vs
+                        ((uint16 bs.[1]) * 256us +
+                         (uint16 bs.[2])
+                        |> Value.UInt16)
+                    |> _unpack bs.[3..]
+                elif (header = Format.UInt32) && (bs.Length >= 5) then
+                    Utility.seq_append
+                        vs
+                        ((uint32 bs.[1]) * 16777216u +
+                         (uint32 bs.[2]) * 65536u +
+                         (uint32 bs.[3]) * 256u +
+                         (uint32 bs.[4])
+                        |> Value.UInt32)
+                    |> _unpack bs.[5..]
+                elif (header = Format.UInt64) && (bs.Length >= 9) then
+                    Utility.seq_append
+                        vs
+                        ((uint64 bs.[1]) * 72057594037927936UL +
+                         (uint64 bs.[2]) * 281474976710656UL +
+                         (uint64 bs.[3]) * 1099511627776UL +
+                         (uint64 bs.[4]) * 4294967296UL +
+                         (uint64 bs.[5]) * 16777216UL +
+                         (uint64 bs.[6]) * 65536UL +
+                         (uint64 bs.[7]) * 256UL +
+                         (uint64 bs.[8])
+                        |> Value.UInt64)
+                    |> _unpack bs.[9..]
+                elif (header = Format.Int8) && (bs.Length >= 2) then
+                    Utility.seq_append
+                        vs
+                        ((sbyte bs.[1]) |> Value.Int8)
+                    |> _unpack bs.[2..]
+                elif (header = Format.Int16) && (bs.Length >= 3) then
+                    Utility.seq_append
+                        vs
+                        ((uint16 bs.[1]) * 256us +
+                         (uint16 bs.[2])
+                        |> int16
+                        |> Value.Int16)
+                    |> _unpack bs.[3..]
+                elif (header = Format.Int32) && (bs.Length >= 5) then
+                    Utility.seq_append
+                        vs
+                        ((uint32 bs.[1]) * 16777216u +
+                         (uint32 bs.[2]) * 65536u +
+                         (uint32 bs.[3]) * 256u +
+                         (uint32 bs.[4])
+                        |> int
+                        |> Value.Int32)
+                    |> _unpack bs.[5..]
+                elif (header = Format.Int64) && (bs.Length >= 9) then
+                    Utility.seq_append
+                        vs
+                        ((uint64 bs.[1]) * 72057594037927936UL +
+                         (uint64 bs.[2]) * 281474976710656UL +
+                         (uint64 bs.[3]) * 1099511627776UL +
+                         (uint64 bs.[4]) * 4294967296UL +
+                         (uint64 bs.[5]) * 16777216UL +
+                         (uint64 bs.[6]) * 65536UL +
+                         (uint64 bs.[7]) * 256UL +
+                         (uint64 bs.[8])
+                        |> int64
+                        |> Value.Int64)
+                    |> _unpack bs.[9..]
+                elif (header &&& 0b11100000uy) = 0b11100000uy then
+                    Utility.seq_append
+                        vs
+                        (sbyte header
+                        |> Value.Int8)
+                    |> _unpack bs.[1..]
+                else
+                    vs
+        _unpack bs []
