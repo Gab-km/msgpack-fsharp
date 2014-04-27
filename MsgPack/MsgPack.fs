@@ -18,7 +18,6 @@ type Value =
     | Array of Value []
     | Map of Map<Value, Value>
     | Ext of sbyte * byte []
-    //TODO: implement ToString method
     override self.ToString() =
         match self with
         | Nil -> "Nil"
@@ -34,8 +33,8 @@ type Value =
         | Int32 (i) -> "Int32 " + (i.ToString())
         | Int64 (i) -> "Int64 " + (i.ToString())
         | String (s) -> "String " + s
-        | Bin (bs) -> sprintf "Bin %A" bs
-        | Array (ar) -> sprintf "Array %A" ar
+        | Bin (bs) -> sprintf "Bin of %d-length binary" bs.Length
+        | Array (ar) -> sprintf "Array of %d-length Value array" ar.Length
         | Map (m) -> "Map " + (m.ToString())
         | Ext (key, value) -> "Ext " + (key, value).ToString()
 
@@ -71,6 +70,9 @@ type Format =
     static member Array32 = 0xDDuy
     static member Map16 = 0xDEuy
     static member Map32 = 0xDFuy
+
+type MessagePackException(message : string) =
+    inherit System.Exception(message)
 
 module internal Utility =
     open System.Runtime.InteropServices
@@ -471,6 +473,16 @@ module Unpacker =
                         vs
                         (Value.UInt8 header)
                     |> _unpack bs.[1..]
+                elif (header &&& 0b11100000uy) = 0b10100000uy then
+                    let length = int(header &&& 0b00011111uy)
+                    if bs.Length - 1 >= length then
+                        Utility.seq_append
+                            vs
+                            (System.Text.Encoding.UTF8.GetString(bs.[1..length])
+                             |> Value.String)
+                        |> _unpack bs.[(length+1)..]
+                    else
+                        MessagePackException("Attempt to unpack with non-compatible type") |> raise
                 elif (header = Format.Nil) then
                     Utility.seq_append
                         vs
@@ -486,6 +498,36 @@ module Unpacker =
                         vs
                         (Value.Bool true)
                     |> _unpack bs.[1..]
+                elif (header = Format.Bin8) && (bs.Length >= 2) then
+                    let length = int(bs.[1])
+                    if bs.Length - 2 >= length then
+                        Utility.seq_append
+                            vs
+                            (Value.Bin bs.[2..(length+1)])
+                        |> _unpack bs.[(length+2)..]
+                    else
+                        MessagePackException("Attempt to unpack with non-compatible type") |> raise
+                elif (header = Format.Bin16) && (bs.Length >= 3) then
+                    let length = int(bs.[1]) * 256 + int(bs.[2])
+                    if bs.Length - 3 >= length then
+                        Utility.seq_append
+                            vs
+                            (Value.Bin bs.[3..(length+2)])
+                        |> _unpack bs.[(length+3)..]
+                    else
+                        MessagePackException("Attempt to unpack with non-compatible type") |> raise
+                elif (header = Format.Bin32) && (bs.Length >= 5) then
+                    let length = int(bs.[1]) * 16777216 +
+                                 int(bs.[2]) * 65536 +
+                                 int(bs.[3]) * 256 +
+                                 int(bs.[4])
+                    if bs.Length - 5 >= length then
+                        Utility.seq_append
+                            vs
+                            (Value.Bin bs.[5..(length+4)])
+                        |> _unpack bs.[(length+5)..]
+                    else
+                        MessagePackException("Attempt to unpack with non-compatible type") |> raise
                 elif (header = Format.Float32) && (bs.Length >= 5) then
                     Utility.seq_append
                         vs
@@ -569,6 +611,39 @@ module Unpacker =
                         |> int64
                         |> Value.Int64)
                     |> _unpack bs.[9..]
+                elif (header = Format.Str8) && (bs.Length >= 2) then
+                    let length = int(bs.[1])
+                    if bs.Length - 2 >= length then
+                        Utility.seq_append
+                            vs
+                            (System.Text.Encoding.UTF8.GetString(bs.[2..(length+1)])
+                             |> Value.String)
+                        |> _unpack bs.[(length+2)..]
+                    else
+                        MessagePackException("Attempt to unpack with non-compatible type") |> raise
+                elif (header = Format.Str16) && (bs.Length >= 3) then
+                    let length = int(bs.[1]) * 256 + int(bs.[2])
+                    if bs.Length - 3 >= length then
+                        Utility.seq_append
+                            vs
+                            (System.Text.Encoding.UTF8.GetString(bs.[3..(length+2)])
+                             |> Value.String)
+                        |> _unpack bs.[(length+3)..]
+                    else
+                        MessagePackException("Attempt to unpack with non-compatible type") |> raise
+                elif (header = Format.Str32) && (bs.Length >= 5) then
+                    let length = int(bs.[1]) * 16777216 +
+                                 int(bs.[2]) * 65536 +
+                                 int(bs.[3]) * 256 +
+                                 int(bs.[4])
+                    if bs.Length - 5 >= length then
+                        Utility.seq_append
+                            vs
+                            (System.Text.Encoding.UTF8.GetString(bs.[5..(length+4)])
+                             |> Value.String)
+                        |> _unpack bs.[(length+5)..]
+                    else
+                        MessagePackException("Attempt to unpack with non-compatible type") |> raise
                 elif (header &&& 0b11100000uy) = 0b11100000uy then
                     Utility.seq_append
                         vs

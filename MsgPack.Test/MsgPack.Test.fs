@@ -553,6 +553,11 @@ module UnpackTest =
         Unpacker.unpack [| 0x7Fuy |] |> assertEquivalentTo (seq [ Value.UInt8 127uy ])
 
     [<Test>]
+    let ``Given 0xAB4D6573736167655061636B When unpack Then return seq [Value.String "MessagePack"]`` () =
+        Unpacker.unpack [| 0xABuy; 0x4Duy; 0x65uy; 0x73uy; 0x73uy; 0x61uy; 0x67uy; 0x65uy; 0x50uy; 0x61uy; 0x63uy; 0x6Buy |]
+        |> assertEquivalentTo (seq [Value.String "MessagePack"])
+
+    [<Test>]
     let ``Given 0xC0 When unpack Then return seq [Value.Nil]`` () =
         Unpacker.unpack [| 0xC0uy |] |> assertEquivalentTo (seq [Value.Nil])
 
@@ -563,6 +568,26 @@ module UnpackTest =
     [<Test>]
     let ``Given 0xC3 When unpack Then return seq [Value.Bool true]`` () =
         Unpacker.unpack [| 0xC3uy |] |> assertEquivalentTo (seq [Value.Bool true])
+
+    [<Test>]
+    let ``Given 0xC4FF and 255-length of 0xFF array When unpack Then return seq [Value.Bin (255-length of 0xFF)]`` () =
+        let bs = Array.init 255 (fun _ -> 0xFFuy)
+        Array.append [| 0xC4uy; 0xFFuy |] bs |> Unpacker.unpack |> assertEquivalentTo (seq [Value.Bin bs])
+
+    [<Test>]
+    let ``Given 0xC50100 and 256-length of 0x20 array When unpack Then return seq [Value.Bin (256-length of 0x20)]`` () =
+        let bs = Array.init 256 (fun _ -> 0x20uy)
+        Array.append [| 0xC5uy; 0x01uy; 0x00uy |] bs |> Unpacker.unpack |> assertEquivalentTo (seq [Value.Bin bs])
+
+    [<Test>]
+    let ``Given 0xC5FFFF and 65535-length of 0x30 array When unpack Then return seq [Value.Bin (65535-length of 0x30)]`` () =
+        let bs = Array.init 65535 (fun _ -> 0x30uy)
+        Array.append [| 0xC5uy; 0xFFuy; 0xFFuy |] bs |> Unpacker.unpack |> assertEquivalentTo (seq [Value.Bin bs])
+
+    [<Test>]
+    let ``Given 0xC600010000 and 65536-length of 0x41 array When unpack Then return seq [Value.Bin (65536-length of 0x41)]`` () =
+        let bs = Array.init 65536 (fun _ -> 0x41uy)
+        Array.append [| 0xC6uy; 0x00uy; 0x01uy; 0x00uy; 0x00uy |] bs |> Unpacker.unpack |> assertEquivalentTo (seq [Value.Bin bs])
 
     [<Test>]
     let ``Given 0xCA3E200000 When unpack Then return seq [Value.Float32 0.15625]`` () =
@@ -645,9 +670,29 @@ module UnpackTest =
         Unpacker.unpack [| 0xD3uy; 0x80uy; 0x00uy; 0x00uy; 0x00uy; 0x00uy; 0x00uy; 0x00uy; 0x00uy |] |> assertEquivalentTo (seq [Value.Int64 (-9223372036854775808L)])
 
     [<Test>]
+    let ``Given 0xD920 and 32-length of 0x41 array When unpack Then return seq [Value.String (32-length 0f "A")]`` () =
+        Array.append [| 0xD9uy; 0x20uy |] (Array.init 32 (fun _ -> 0x41uy)) |> Unpacker.unpack |> assertEquivalentTo (seq [Value.String (System.String('A', 32))])
+    
+    [<Test>]
+    let ``Given 0xD9FF and 255-length of 0x61 array When unpack Then return seq [Value.String (255-length of "a")]`` () =
+        Array.append [| 0xD9uy; 0xFFuy |] (Array.init 255 (fun _ -> 0x61uy)) |> Unpacker.unpack |> assertEquivalentTo (seq [Value.String (System.String('a', 255))])
+
+    [<Test>]
+    let ``Given 0xDA0100 and 256-length of 0x30 array When unpack Then return seq [Value.String (256-length of "0")]`` () =
+        Array.append [| 0xDAuy; 0x01uy; 0x00uy |] (Array.init 256 (fun _ -> 0x30uy)) |> Unpacker.unpack |> assertEquivalentTo (seq [Value.String (System.String('0', 256))])
+
+    [<Test>]
+    let ``Given 0xDAFFFF and 65535-length of 0x39 array When unpack Then return seq [Value.String (65535-length of "9")]`` () =
+        Array.append [| 0xDAuy; 0xFFuy; 0xFFuy |] (Array.init 65535 (fun _ -> 0x39uy)) |> Unpacker.unpack |> assertEquivalentTo (seq [Value.String (System.String('9', 65535))])
+
+    [<Test>]
+    let ``Given 0xDB00010000 and 65536-length of 0x20 array When unpack Then return seq [Value.String (65536-length of " ")]`` () =
+        Array.append [| 0xDBuy; 0x00uy; 0x01uy; 0x00uy; 0x00uy |] (Array.init 65536 (fun _ -> 0x20uy)) |> Unpacker.unpack |> assertEquivalentTo (seq [Value.String (System.String(' ', 65536))])
+
+    [<Test>]
     let ``Given 0xFF When unpack Then return seq [Value.Int8 (-1)]`` () =
         Unpacker.unpack [| 0xFFuy |] |> assertEquivalentTo (seq [Value.Int8 (-1y)])
 
     [<Test>]
-    let ``Given 0xE0 WHen unpack Then return seq [Value.Int8 (-32)]`` () =
+    let ``Given 0xE0 When unpack Then return seq [Value.Int8 (-32)]`` () =
         Unpacker.unpack [| 0xE0uy |] |> assertEquivalentTo (seq [Value.Int8 (-32y)])
