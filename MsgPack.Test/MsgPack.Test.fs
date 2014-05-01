@@ -553,6 +553,12 @@ module UnpackTest =
         Unpacker.unpack [| 0x7Fuy |] |> assertEquivalentTo (seq [ Value.UInt8 127uy ])
 
     [<Test>]
+    let ``Given 0x9F and byte array of [0 .. 14] When unpack Then return seq [Value.Array [|Value.UInt8 0 ... Value.UInt8 14|]]`` () =
+        let bs = Array.init 15 (fun i -> byte(i))
+        let expected = Array.init 15 (fun i -> i |> byte |> Value.UInt8)
+        Array.append [| 0x9Fuy |] bs |> Unpacker.unpack |> assertEquivalentTo (seq [Value.Array(expected)])
+
+    [<Test>]
     let ``Given 0xAB4D6573736167655061636B When unpack Then return seq [Value.String "MessagePack"]`` () =
         Unpacker.unpack [| 0xABuy; 0x4Duy; 0x65uy; 0x73uy; 0x73uy; 0x61uy; 0x67uy; 0x65uy; 0x50uy; 0x61uy; 0x63uy; 0x6Buy |]
         |> assertEquivalentTo (seq [Value.String "MessagePack"])
@@ -688,6 +694,24 @@ module UnpackTest =
     [<Test>]
     let ``Given 0xDB00010000 and 65536-length of 0x20 array When unpack Then return seq [Value.String (65536-length of " ")]`` () =
         Array.append [| 0xDBuy; 0x00uy; 0x01uy; 0x00uy; 0x00uy |] (Array.init 65536 (fun _ -> 0x20uy)) |> Unpacker.unpack |> assertEquivalentTo (seq [Value.String (System.String(' ', 65536))])
+
+    [<Test>]
+    let ``Given 0xDC0010 and 16-length of 0xC0 array When unpack Then return seq [Value.Array (16-length of Value.Nil)]`` () =
+        let bs = Array.init 16 (fun _ -> 0xC0uy)
+        let expected = Array.init 16 (fun _ -> Value.Nil)
+        Array.append [| 0xDCuy; 0x00uy; 0x10uy |] bs |> Unpacker.unpack |> assertEquivalentTo (seq [Value.Array(expected)])
+
+    [<Test>]
+    let ``Given 0xDCFFFF and 65535-length of 0xC2 array When unpack Then return seq [Value.Array (65535-length of Value.Bool false)]`` () =
+        let bs = Array.init 65535 (fun _ -> 0xC2uy)
+        let expected = Array.init 65535 (fun _ -> Value.Bool false)
+        Array.append [| 0xDCuy; 0xFFuy; 0xFFuy |] bs |> Unpacker.unpack |> assertEquivalentTo (seq [Value.Array(expected)])
+
+    [<Test>]
+    let ``Given 0xDD00010000 and 65536-length of 0xC3 array When unpack Then return seq [Value.Array (65536-length of Value.Bool true)]`` () =
+        let bs = Array.init 65536 (fun _ -> 0xC3uy)
+        let expected = Array.init 65536 (fun _ -> Value.Bool true)
+        Array.append [| 0xDDuy; 0x00uy; 0x01uy; 0x00uy; 0x00uy |] bs |> Unpacker.unpack |> assertEquivalentTo (seq [Value.Array(expected)])
 
     [<Test>]
     let ``Given 0xFF When unpack Then return seq [Value.Int8 (-1)]`` () =

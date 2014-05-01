@@ -34,7 +34,8 @@ type Value =
         | Int64 (i) -> "Int64 " + (i.ToString())
         | String (s) -> "String " + s
         | Bin (bs) -> sprintf "Bin of %d-length binary" bs.Length
-        | Array (ar) -> sprintf "Array of %d-length Value array" ar.Length
+        | Array (ar) -> //sprintf "Array of %d-length Value array" ar.Length
+                        sprintf "%A" ar
         | Map (m) -> "Map " + (m.ToString())
         | Ext (key, value) -> "Ext " + (key, value).ToString()
 
@@ -462,58 +463,74 @@ module Packer =
         | Value.Ext (i, b) -> packExt i b
 
 module Unpacker =
+    type internal ArrayStore = {
+        mutable Count: int
+        ArrayValues: Value []
+    }
     [<CompiledName("Unpack")>]
     let unpack (bs: byte[]) =
-        let rec _unpack (bs: byte[]) (vs: seq<Value>) =
-            if bs.Length = 0 then vs
+        let appendValue (newValue: Value) (arrayStores: ArrayStore list) (values: seq<Value>) =
+            let mutable nv, ars, vs, doLoop = newValue, arrayStores, values, true
+            while doLoop do
+                match ars with
+                | x::xs ->
+                    x.ArrayValues.[x.ArrayValues.Length - x.Count] <- nv
+                    x.Count <- x.Count - 1
+                    if x.Count = 0 then
+                        ars <- xs
+                        nv <- Value.Array x.ArrayValues
+                    else
+                        ars <- x::xs
+                        doLoop <- false
+                | _ ->
+                    vs <- Utility.seq_append vs nv
+                    doLoop <- false
+            ars, vs
+        let rec _unpack (bs: byte[]) (arrayStores: ArrayStore list) (consumed: int) (values: seq<Value>) =
+            if bs.Length = 0 then values, consumed
             else
                 let header = bs.[0]
                 if (header &&& 0b10000000uy) = 0uy then
-                    Utility.seq_append
-                        vs
-                        (Value.UInt8 header)
-                    |> _unpack bs.[1..]
+                    let newValue = Value.UInt8 header
+                    let ars, vs = appendValue newValue arrayStores values
+                    _unpack bs.[1..] ars (consumed + 1) vs
+                elif (header &&& 0b11110000uy) = 0b10010000uy then
+                    let length = int(header &&& 0b00001111uy)
+                    if bs.Length - 1 >= length then
+                        _unpack bs.[1..] ({ Count = length; ArrayValues = Array.init length (fun _ -> Value.Nil) }::arrayStores) (consumed + 1) values
+                    else
+                        MessagePackException("Attempt to unpack with non-compatible type") |> raise
                 elif (header &&& 0b11100000uy) = 0b10100000uy then
                     let length = int(header &&& 0b00011111uy)
                     if bs.Length - 1 >= length then
-                        Utility.seq_append
-                            vs
-                            (System.Text.Encoding.UTF8.GetString(bs.[1..length])
-                             |> Value.String)
-                        |> _unpack bs.[(length+1)..]
+                        let newValue = System.Text.Encoding.UTF8.GetString(bs.[1..length]) |> Value.String
+                        let ars, vs = appendValue newValue arrayStores values
+                        _unpack bs.[(length+1)..] ars (consumed + (length+1)) vs
                     else
                         MessagePackException("Attempt to unpack with non-compatible type") |> raise
                 elif (header = Format.Nil) then
-                    Utility.seq_append
-                        vs
-                        Value.Nil
-                    |> _unpack bs.[1..]
+                    let ars, vs = appendValue Value.Nil arrayStores values
+                    _unpack bs.[1..] ars (consumed + 1) vs
                 elif (header = Format.False) then
-                    Utility.seq_append
-                        vs
-                        (Value.Bool false)
-                    |> _unpack bs.[1..]
+                    let ars, vs = appendValue (Value.Bool false) arrayStores values
+                    _unpack bs.[1..] ars (consumed + 1) vs
                 elif (header = Format.True) then
-                    Utility.seq_append
-                        vs
-                        (Value.Bool true)
-                    |> _unpack bs.[1..]
+                    let ars, vs = appendValue (Value.Bool true) arrayStores values
+                    _unpack bs.[1..] ars (consumed + 1) vs
                 elif (header = Format.Bin8) && (bs.Length >= 2) then
                     let length = int(bs.[1])
                     if bs.Length - 2 >= length then
-                        Utility.seq_append
-                            vs
-                            (Value.Bin bs.[2..(length+1)])
-                        |> _unpack bs.[(length+2)..]
+                        let newValue = Value.Bin bs.[2..(length+1)]
+                        let ars, vs = appendValue newValue arrayStores values
+                        _unpack bs.[(length+2)..] ars (consumed + (length+2)) vs
                     else
                         MessagePackException("Attempt to unpack with non-compatible type") |> raise
                 elif (header = Format.Bin16) && (bs.Length >= 3) then
                     let length = int(bs.[1]) * 256 + int(bs.[2])
                     if bs.Length - 3 >= length then
-                        Utility.seq_append
-                            vs
-                            (Value.Bin bs.[3..(length+2)])
-                        |> _unpack bs.[(length+3)..]
+                        let newValue = Value.Bin bs.[3..(length+2)]
+                        let ars, vs = appendValue newValue arrayStores values
+                        _unpack bs.[(length+3)..] ars (consumed + (length+3)) vs
                     else
                         MessagePackException("Attempt to unpack with non-compatible type") |> raise
                 elif (header = Format.Bin32) && (bs.Length >= 5) then
@@ -522,134 +539,161 @@ module Unpacker =
                                  int(bs.[3]) * 256 +
                                  int(bs.[4])
                     if bs.Length - 5 >= length then
-                        Utility.seq_append
-                            vs
-                            (Value.Bin bs.[5..(length+4)])
-                        |> _unpack bs.[(length+5)..]
+                        let newValue = Value.Bin bs.[5..(length+4)]
+                        let ars, vs = appendValue newValue arrayStores values
+                        _unpack bs.[(length+5)..] ars (consumed + (length+5)) vs
                     else
                         MessagePackException("Attempt to unpack with non-compatible type") |> raise
-                elif (header = Format.Float32) && (bs.Length >= 5) then
-                    Utility.seq_append
-                        vs
-                        (Utility.convertEndianFromBytesToFloat32(bs.[1..4])
-                         |> Value.Float32)
-                    |> _unpack bs.[5..]
-                elif (header = Format.Float64) && (bs.Length >= 9) then
-                    Utility.seq_append
-                        vs
-                        (Utility.convertEndianFromBytesToFloat(bs.[1..8])
-                         |> Value.Float64)
-                    |> _unpack bs.[9..]
-                elif (header = Format.UInt8) && (bs.Length >= 2) then
-                    Utility.seq_append
-                        vs
-                        (Value.UInt8 bs.[1])
-                    |> _unpack bs.[2..]
-                elif (header = Format.UInt16) && (bs.Length >= 3) then
-                    Utility.seq_append
-                        vs
-                        ((uint16 bs.[1]) * 256us +
-                         (uint16 bs.[2])
-                        |> Value.UInt16)
-                    |> _unpack bs.[3..]
-                elif (header = Format.UInt32) && (bs.Length >= 5) then
-                    Utility.seq_append
-                        vs
-                        ((uint32 bs.[1]) * 16777216u +
-                         (uint32 bs.[2]) * 65536u +
-                         (uint32 bs.[3]) * 256u +
-                         (uint32 bs.[4])
-                        |> Value.UInt32)
-                    |> _unpack bs.[5..]
-                elif (header = Format.UInt64) && (bs.Length >= 9) then
-                    Utility.seq_append
-                        vs
-                        ((uint64 bs.[1]) * 72057594037927936UL +
-                         (uint64 bs.[2]) * 281474976710656UL +
-                         (uint64 bs.[3]) * 1099511627776UL +
-                         (uint64 bs.[4]) * 4294967296UL +
-                         (uint64 bs.[5]) * 16777216UL +
-                         (uint64 bs.[6]) * 65536UL +
-                         (uint64 bs.[7]) * 256UL +
-                         (uint64 bs.[8])
-                        |> Value.UInt64)
-                    |> _unpack bs.[9..]
-                elif (header = Format.Int8) && (bs.Length >= 2) then
-                    Utility.seq_append
-                        vs
-                        ((sbyte bs.[1]) |> Value.Int8)
-                    |> _unpack bs.[2..]
-                elif (header = Format.Int16) && (bs.Length >= 3) then
-                    Utility.seq_append
-                        vs
-                        ((uint16 bs.[1]) * 256us +
-                         (uint16 bs.[2])
-                        |> int16
-                        |> Value.Int16)
-                    |> _unpack bs.[3..]
-                elif (header = Format.Int32) && (bs.Length >= 5) then
-                    Utility.seq_append
-                        vs
-                        ((uint32 bs.[1]) * 16777216u +
-                         (uint32 bs.[2]) * 65536u +
-                         (uint32 bs.[3]) * 256u +
-                         (uint32 bs.[4])
-                        |> int
-                        |> Value.Int32)
-                    |> _unpack bs.[5..]
-                elif (header = Format.Int64) && (bs.Length >= 9) then
-                    Utility.seq_append
-                        vs
-                        ((uint64 bs.[1]) * 72057594037927936UL +
-                         (uint64 bs.[2]) * 281474976710656UL +
-                         (uint64 bs.[3]) * 1099511627776UL +
-                         (uint64 bs.[4]) * 4294967296UL +
-                         (uint64 bs.[5]) * 16777216UL +
-                         (uint64 bs.[6]) * 65536UL +
-                         (uint64 bs.[7]) * 256UL +
-                         (uint64 bs.[8])
-                        |> int64
-                        |> Value.Int64)
-                    |> _unpack bs.[9..]
-                elif (header = Format.Str8) && (bs.Length >= 2) then
-                    let length = int(bs.[1])
-                    if bs.Length - 2 >= length then
-                        Utility.seq_append
-                            vs
-                            (System.Text.Encoding.UTF8.GetString(bs.[2..(length+1)])
-                             |> Value.String)
-                        |> _unpack bs.[(length+2)..]
+                elif (header = Format.Float32) then
+                    if bs.Length >= 5 then
+                        let newValue = Utility.convertEndianFromBytesToFloat32(bs.[1..4]) |> Value.Float32
+                        let ars, vs = appendValue newValue arrayStores values
+                        _unpack bs.[5..] ars (consumed + 5) vs
                     else
-                        MessagePackException("Attempt to unpack with non-compatible type") |> raise
-                elif (header = Format.Str16) && (bs.Length >= 3) then
-                    let length = int(bs.[1]) * 256 + int(bs.[2])
-                    if bs.Length - 3 >= length then
-                        Utility.seq_append
-                            vs
-                            (System.Text.Encoding.UTF8.GetString(bs.[3..(length+2)])
-                             |> Value.String)
-                        |> _unpack bs.[(length+3)..]
+                        MessagePackException("Attempt to unpack with non-compativle type") |> raise
+                elif header = Format.Float64 then
+                    if bs.Length >= 9 then
+                        let newValue = Utility.convertEndianFromBytesToFloat(bs.[1..8]) |> Value.Float64
+                        let ars, vs = appendValue newValue arrayStores values
+                        _unpack bs.[9..] ars (consumed + 9) vs
                     else
-                        MessagePackException("Attempt to unpack with non-compatible type") |> raise
-                elif (header = Format.Str32) && (bs.Length >= 5) then
-                    let length = int(bs.[1]) * 16777216 +
-                                 int(bs.[2]) * 65536 +
-                                 int(bs.[3]) * 256 +
-                                 int(bs.[4])
-                    if bs.Length - 5 >= length then
-                        Utility.seq_append
-                            vs
-                            (System.Text.Encoding.UTF8.GetString(bs.[5..(length+4)])
-                             |> Value.String)
-                        |> _unpack bs.[(length+5)..]
+                        MessagePackException("Attempt to unpack with non-compativle type") |> raise
+                elif header = Format.UInt8 then
+                    if bs.Length >= 2 then
+                        let newValue = Value.UInt8 bs.[1]
+                        let ars, vs = appendValue newValue arrayStores values
+                        _unpack bs.[2..] ars (consumed + 2) vs
                     else
-                        MessagePackException("Attempt to unpack with non-compatible type") |> raise
+                        MessagePackException("Attempt to unpack with non-compativle type") |> raise
+                elif header = Format.UInt16 then
+                    if bs.Length >= 3 then
+                        let newValue = (uint16 bs.[1]) * 256us + (uint16 bs.[2]) |> Value.UInt16
+                        let ars, vs = appendValue newValue arrayStores values
+                        _unpack bs.[3..] ars (consumed + 3) vs
+                    else
+                        MessagePackException("Attempt to unpack with non-compativle type") |> raise
+                elif header = Format.UInt32 then
+                    if bs.Length >= 5 then
+                        let newValue = (uint32 bs.[1]) * 16777216u + (uint32 bs.[2]) * 65536u + (uint32 bs.[3]) * 256u + (uint32 bs.[4]) |> Value.UInt32
+                        let ars, vs = appendValue newValue arrayStores values
+                        _unpack bs.[5..] ars (consumed + 5) vs
+                    else
+                        MessagePackException("Attempt to unpack with non-compativle type") |> raise
+                elif header = Format.UInt64 then
+                    if bs.Length >= 9 then
+                        let newValue =
+                            (uint64 bs.[1]) * 72057594037927936UL +
+                            (uint64 bs.[2]) * 281474976710656UL +
+                            (uint64 bs.[3]) * 1099511627776UL +
+                            (uint64 bs.[4]) * 4294967296UL +
+                            (uint64 bs.[5]) * 16777216UL +
+                            (uint64 bs.[6]) * 65536UL +
+                            (uint64 bs.[7]) * 256UL +
+                            (uint64 bs.[8])
+                            |> Value.UInt64
+                        let ars, vs = appendValue newValue arrayStores values
+                        _unpack bs.[9..] ars (consumed + 9) vs
+                    else
+                        MessagePackException("Attempt to unpack with non-compativle type") |> raise
+                elif header = Format.Int8 then
+                    if bs.Length >= 2 then
+                        let newValue = (sbyte bs.[1]) |> Value.Int8
+                        let ars, vs = appendValue newValue arrayStores values
+                        _unpack bs.[2..] ars (consumed + 2) vs
+                    else
+                        MessagePackException("Attempt to unpack with non-compativle type") |> raise
+                elif header = Format.Int16 then
+                    if bs.Length >= 3 then
+                        let newValue = (uint16 bs.[1]) * 256us + (uint16 bs.[2]) |> int16 |> Value.Int16
+                        let ars, vs = appendValue newValue arrayStores values
+                        _unpack bs.[3..] ars (consumed + 3) vs
+                    else
+                        MessagePackException("Attempt to unpack with non-compativle type") |> raise
+                elif header = Format.Int32 then
+                    if bs.Length >= 5 then
+                        let newValue = (uint32 bs.[1]) * 16777216u + (uint32 bs.[2]) * 65536u + (uint32 bs.[3]) * 256u + (uint32 bs.[4]) |> int |> Value.Int32
+                        let ars, vs = appendValue newValue arrayStores values
+                        _unpack bs.[5..] ars (consumed + 5) vs
+                    else
+                        MessagePackException("Attempt to unpack with non-compativle type") |> raise
+                elif header = Format.Int64 then
+                    if bs.Length >= 9 then
+                        let newValue =
+                            (uint64 bs.[1]) * 72057594037927936UL +
+                            (uint64 bs.[2]) * 281474976710656UL +
+                            (uint64 bs.[3]) * 1099511627776UL +
+                            (uint64 bs.[4]) * 4294967296UL +
+                            (uint64 bs.[5]) * 16777216UL +
+                            (uint64 bs.[6]) * 65536UL +
+                            (uint64 bs.[7]) * 256UL +
+                            (uint64 bs.[8])
+                            |> int64
+                            |> Value.Int64
+                        let ars, vs = appendValue newValue arrayStores values
+                        _unpack bs.[9..] ars (consumed + 9) vs
+                    else
+                        MessagePackException("Attempt to unpack with non-compativle type") |> raise
+                elif header = Format.Str8 then
+                    if bs.Length >= 2 then
+                        let length = int(bs.[1])
+                        if bs.Length - 2 >= length then
+                            let newValue = System.Text.Encoding.UTF8.GetString(bs.[2..(length+1)]) |> Value.String
+                            let ars, vs = appendValue newValue arrayStores values
+                            _unpack bs.[(length+2)..] ars (consumed + (length+2)) vs
+                        else
+                            MessagePackException("Attempt to unpack with non-compatible type") |> raise
+                    else
+                        MessagePackException("Attempt to unpack with non-compativle type") |> raise
+                elif header = Format.Str16 then
+                    if bs.Length >= 3 then
+                        let length = int(bs.[1]) * 256 + int(bs.[2])
+                        if bs.Length - 3 >= length then
+                            let newValue = System.Text.Encoding.UTF8.GetString(bs.[3..(length+2)]) |> Value.String
+                            let ars, vs = appendValue newValue arrayStores values
+                            _unpack bs.[(length+3)..] ars (consumed + (length+3)) vs
+                        else
+                            MessagePackException("Attempt to unpack with non-compatible type") |> raise
+                    else
+                        MessagePackException("Attempt to unpack with non-compativle type") |> raise
+                elif header = Format.Str32 then
+                    if bs.Length >= 5 then
+                        let length = int(bs.[1]) * 16777216 +
+                                     int(bs.[2]) * 65536 +
+                                     int(bs.[3]) * 256 +
+                                     int(bs.[4])
+                        if bs.Length - 5 >= length then
+                            let newValue = System.Text.Encoding.UTF8.GetString(bs.[5..(length+4)]) |> Value.String
+                            let ars, vs = appendValue newValue arrayStores values
+                            _unpack bs.[(length+5)..] ars (consumed + (length+5)) vs
+                        else
+                            MessagePackException("Attempt to unpack with non-compatible type") |> raise
+                    else
+                        MessagePackException("Attempt to unpack with non-compativle type") |> raise
+                elif header = Format.Array16 then
+                    if bs.Length >= 3 then
+                        let length = int(bs.[1]) * 256 + int(bs.[2])
+                        if bs.Length - 3 >= length then
+                            _unpack bs.[3..] ({ Count = length; ArrayValues = Array.init length (fun _ -> Value.Nil) }::arrayStores) (consumed + 3) values
+                        else
+                            MessagePackException("Attempt to unpack with non-compatible type") |> raise
+                    else
+                        MessagePackException("Attempt to unpack with non-compativle type") |> raise
+                elif header = Format.Array32 then
+                    if bs.Length >= 5 then
+                        let length = int(bs.[1]) * 16777216 +
+                                     int(bs.[2]) * 65536 +
+                                     int(bs.[3]) * 256 +
+                                     int(bs.[4])
+                        if bs.Length - 5 >= length then
+                            _unpack bs.[5..] ({ Count = length; ArrayValues = Array.init length (fun _ -> Value.Nil) }::arrayStores) (consumed + 5) values
+                        else
+                            MessagePackException("Attempt to unpack with non-compatible type") |> raise
+                    else
+                        MessagePackException("Attempt to unpack with non-compativle type") |> raise
                 elif (header &&& 0b11100000uy) = 0b11100000uy then
-                    Utility.seq_append
-                        vs
-                        (sbyte header
-                        |> Value.Int8)
-                    |> _unpack bs.[1..]
+                    let newValue = sbyte header |> Value.Int8
+                    let ars, vs = appendValue newValue arrayStores values
+                    _unpack bs.[1..] ars (consumed + 1) vs
                 else
-                    vs
-        _unpack bs []
+                    values, consumed
+        _unpack bs [] 0 [] |> fst
