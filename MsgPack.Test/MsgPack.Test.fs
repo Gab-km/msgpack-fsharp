@@ -553,6 +553,12 @@ module UnpackTest =
         Unpacker.unpack [| 0x7Fuy |] |> assertEquivalentTo (seq [ Value.UInt8 127uy ])
 
     [<Test>]
+    let ``Given 0x8F and byte * bool array of [(0, false); (1, true) .. (14, false)] When unpack Then return seq [Value.Map { Value.UInt8 0: Value.Bool false .. Value.UInt8 14: Value.Bool false }`` () =
+        let bs = Array.init 15 (fun i -> if i % 2 = 0 then [| byte(i); 0xC2uy |] else [| byte(i); 0xC3uy |]) |> Array.concat
+        let expected = List.init 15 (fun i -> ((i |> byte |> Value.UInt8), if i % 2 = 0 then Value.Bool false else Value.Bool true)) |> Map.ofList
+        Array.append [| 0x8Fuy |] bs |> Unpacker.unpack |> assertEquivalentTo (seq [Value.Map(expected)])
+
+    [<Test>]
     let ``Given 0x9F and byte array of [0 .. 14] When unpack Then return seq [Value.Array [|Value.UInt8 0 ... Value.UInt8 14|]]`` () =
         let bs = Array.init 15 (fun i -> byte(i))
         let expected = Array.init 15 (fun i -> i |> byte |> Value.UInt8)
@@ -712,6 +718,42 @@ module UnpackTest =
         let bs = Array.init 65536 (fun _ -> 0xC3uy)
         let expected = Array.init 65536 (fun _ -> Value.Bool true)
         Array.append [| 0xDDuy; 0x00uy; 0x01uy; 0x00uy; 0x00uy |] bs |> Unpacker.unpack |> assertEquivalentTo (seq [Value.Array(expected)])
+
+    [<Test>]
+    let ``Given 0xDE0010 and 16-length of key value collections When unpack Then return seq [Value.Map (16-length of (int format family, bool format family))]`` () =
+        let bs = Array.init 16 (fun i -> if i % 2 = 0 then [| byte(i); 0xC2uy |] else [| byte(i); 0xC3uy |]) |> Array.concat
+        let expected = List.init 16 (fun i -> (i |> byte |> Value.UInt8), if i % 2 = 0 then Value.Bool false else Value.Bool true) |> Map.ofList
+        Array.append [| 0xDEuy; 0x00uy; 0x10uy |] bs |> Unpacker.unpack |> assertEquivalentTo (seq [Value.Map(expected)])
+
+    [<Test>]
+    let ``Given 0xDEFFFF and 65535-length of key value collections When unpack Then return seq [Value.Map (65535-length of (int format family, bool format family))]`` () =
+        let bs = Array.init 65535 (fun i -> Array.append (Packer.packInt i) [| (if i % 2 = 0 then 0xC2uy else 0xC3uy) |]) |> Array.concat
+        let expected =
+            List.init 65535
+                (fun i ->
+                    if i <= 255 then
+                        i |> byte |> Value.UInt8
+                    else
+                        i |> uint16 |> Value.UInt16
+                    , if i % 2 = 0 then Value.Bool false else Value.Bool true)
+            |> Map.ofList
+        Array.append [| 0xDEuy; 0xFFuy; 0xFFuy |] bs |> Unpacker.unpack |> assertEquivalentTo (seq [Value.Map(expected)])
+
+    [<Test>]
+    let ``Given 0xDF00010000 and 65536-length of key value collections When unpack Then return seq [Value.Map (65536-length of (int format family, bool format family))]`` () =
+        let bs = Array.init 65536 (fun i -> Array.append (Packer.packInt i) [| 0xC3uy |]) |> Array.concat
+        let expected =
+            List.init 65536
+                (fun i ->
+                    if i <= 255 then
+                        i |> byte |> Value.UInt8
+                    elif i<= 65535 then
+                        i |> uint16 |> Value.UInt16
+                    else
+                        i |> uint32 |> Value.UInt32
+                    , Value.Bool true)
+            |> Map.ofList
+        Array.append [| 0xDFuy; 0x00uy; 0x01uy; 0x00uy; 0x00uy |] bs |> Unpacker.unpack |> assertEquivalentTo (seq [Value.Map(expected)])
 
     [<Test>]
     let ``Given 0xFF When unpack Then return seq [Value.Int8 (-1)]`` () =

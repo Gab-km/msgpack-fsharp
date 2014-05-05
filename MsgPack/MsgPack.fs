@@ -463,65 +463,82 @@ module Packer =
         | Value.Ext (i, b) -> packExt i b
 
 module Unpacker =
-    type internal ArrayStore = {
-        mutable Count: int
-        ArrayValues: Value []
-    }
+    type internal Sequencials =
+        | ArrayStore of int * Value []
+        | MapStore of int * Value * Map<Value, Value>
     [<CompiledName("Unpack")>]
     let unpack (bs: byte[]) =
-        let appendValue (newValue: Value) (arrayStores: ArrayStore list) (values: seq<Value>) =
-            let mutable nv, ars, vs, doLoop = newValue, arrayStores, values, true
+        let appendValue (newValue: Value) (sequencials: Sequencials list) (values: seq<Value>) =
+            let mutable nv, ars, vs, doLoop = newValue, sequencials, values, true
             while doLoop do
                 match ars with
-                | x::xs ->
-                    x.ArrayValues.[x.ArrayValues.Length - x.Count] <- nv
-                    x.Count <- x.Count - 1
-                    if x.Count = 0 then
+                | (ArrayStore (count, arrayValues))::xs ->
+                    arrayValues.[arrayValues.Length - count] <- nv
+                    let newCount = count - 1
+                    if newCount = 0 then
                         ars <- xs
-                        nv <- Value.Array x.ArrayValues
+                        nv <- Value.Array arrayValues
                     else
-                        ars <- x::xs
+                        ars <- (ArrayStore(newCount, arrayValues))::xs
+                        doLoop <- false
+                | (MapStore (count, Value.Nil, mapValues))::xs ->
+                    ars <- (MapStore(count, newValue, mapValues))::xs
+                    doLoop <- false
+                | (MapStore (count, key, mapValues))::xs ->
+                    let newMap = Map.add key newValue mapValues
+                    let newCount = count - 1
+                    if newCount = 0 then
+                        ars <- xs
+                        nv <- Value.Map newMap
+                    else
+                        ars <- (MapStore(newCount, Value.Nil, newMap))::xs
                         doLoop <- false
                 | _ ->
                     vs <- Utility.seq_append vs nv
                     doLoop <- false
             ars, vs
-        let rec _unpack (bs: byte[]) (arrayStores: ArrayStore list) (consumed: int) (values: seq<Value>) =
+        let rec _unpack (bs: byte[]) (sequencials: Sequencials list) (consumed: int) (values: seq<Value>) =
             if bs.Length = 0 then values, consumed
             else
                 let header = bs.[0]
                 if (header &&& 0b10000000uy) = 0uy then
                     let newValue = Value.UInt8 header
-                    let ars, vs = appendValue newValue arrayStores values
+                    let ars, vs = appendValue newValue sequencials values
                     _unpack bs.[1..] ars (consumed + 1) vs
+                elif (header &&& 0b11110000uy) = 0b10000000uy then
+                    let length = int(header &&& 0b00001111uy)
+                    if bs.Length - 1 >= length then
+                        _unpack bs.[1..] (MapStore(length, Value.Nil, Map.ofList [])::sequencials) (consumed + 1) values
+                    else
+                        MessagePackException("Attempt to unpack with non-compatible type") |> raise
                 elif (header &&& 0b11110000uy) = 0b10010000uy then
                     let length = int(header &&& 0b00001111uy)
                     if bs.Length - 1 >= length then
-                        _unpack bs.[1..] ({ Count = length; ArrayValues = Array.init length (fun _ -> Value.Nil) }::arrayStores) (consumed + 1) values
+                        _unpack bs.[1..] ((ArrayStore(length, Array.init length (fun _ -> Value.Nil)))::sequencials) (consumed + 1) values
                     else
                         MessagePackException("Attempt to unpack with non-compatible type") |> raise
                 elif (header &&& 0b11100000uy) = 0b10100000uy then
                     let length = int(header &&& 0b00011111uy)
                     if bs.Length - 1 >= length then
                         let newValue = System.Text.Encoding.UTF8.GetString(bs.[1..length]) |> Value.String
-                        let ars, vs = appendValue newValue arrayStores values
+                        let ars, vs = appendValue newValue sequencials values
                         _unpack bs.[(length+1)..] ars (consumed + (length+1)) vs
                     else
                         MessagePackException("Attempt to unpack with non-compatible type") |> raise
                 elif (header = Format.Nil) then
-                    let ars, vs = appendValue Value.Nil arrayStores values
+                    let ars, vs = appendValue Value.Nil sequencials values
                     _unpack bs.[1..] ars (consumed + 1) vs
                 elif (header = Format.False) then
-                    let ars, vs = appendValue (Value.Bool false) arrayStores values
+                    let ars, vs = appendValue (Value.Bool false) sequencials values
                     _unpack bs.[1..] ars (consumed + 1) vs
                 elif (header = Format.True) then
-                    let ars, vs = appendValue (Value.Bool true) arrayStores values
+                    let ars, vs = appendValue (Value.Bool true) sequencials values
                     _unpack bs.[1..] ars (consumed + 1) vs
                 elif (header = Format.Bin8) && (bs.Length >= 2) then
                     let length = int(bs.[1])
                     if bs.Length - 2 >= length then
                         let newValue = Value.Bin bs.[2..(length+1)]
-                        let ars, vs = appendValue newValue arrayStores values
+                        let ars, vs = appendValue newValue sequencials values
                         _unpack bs.[(length+2)..] ars (consumed + (length+2)) vs
                     else
                         MessagePackException("Attempt to unpack with non-compatible type") |> raise
@@ -529,7 +546,7 @@ module Unpacker =
                     let length = int(bs.[1]) * 256 + int(bs.[2])
                     if bs.Length - 3 >= length then
                         let newValue = Value.Bin bs.[3..(length+2)]
-                        let ars, vs = appendValue newValue arrayStores values
+                        let ars, vs = appendValue newValue sequencials values
                         _unpack bs.[(length+3)..] ars (consumed + (length+3)) vs
                     else
                         MessagePackException("Attempt to unpack with non-compatible type") |> raise
@@ -540,42 +557,42 @@ module Unpacker =
                                  int(bs.[4])
                     if bs.Length - 5 >= length then
                         let newValue = Value.Bin bs.[5..(length+4)]
-                        let ars, vs = appendValue newValue arrayStores values
+                        let ars, vs = appendValue newValue sequencials values
                         _unpack bs.[(length+5)..] ars (consumed + (length+5)) vs
                     else
                         MessagePackException("Attempt to unpack with non-compatible type") |> raise
                 elif (header = Format.Float32) then
                     if bs.Length >= 5 then
                         let newValue = Utility.convertEndianFromBytesToFloat32(bs.[1..4]) |> Value.Float32
-                        let ars, vs = appendValue newValue arrayStores values
+                        let ars, vs = appendValue newValue sequencials values
                         _unpack bs.[5..] ars (consumed + 5) vs
                     else
                         MessagePackException("Attempt to unpack with non-compativle type") |> raise
                 elif header = Format.Float64 then
                     if bs.Length >= 9 then
                         let newValue = Utility.convertEndianFromBytesToFloat(bs.[1..8]) |> Value.Float64
-                        let ars, vs = appendValue newValue arrayStores values
+                        let ars, vs = appendValue newValue sequencials values
                         _unpack bs.[9..] ars (consumed + 9) vs
                     else
                         MessagePackException("Attempt to unpack with non-compativle type") |> raise
                 elif header = Format.UInt8 then
                     if bs.Length >= 2 then
                         let newValue = Value.UInt8 bs.[1]
-                        let ars, vs = appendValue newValue arrayStores values
+                        let ars, vs = appendValue newValue sequencials values
                         _unpack bs.[2..] ars (consumed + 2) vs
                     else
                         MessagePackException("Attempt to unpack with non-compativle type") |> raise
                 elif header = Format.UInt16 then
                     if bs.Length >= 3 then
                         let newValue = (uint16 bs.[1]) * 256us + (uint16 bs.[2]) |> Value.UInt16
-                        let ars, vs = appendValue newValue arrayStores values
+                        let ars, vs = appendValue newValue sequencials values
                         _unpack bs.[3..] ars (consumed + 3) vs
                     else
                         MessagePackException("Attempt to unpack with non-compativle type") |> raise
                 elif header = Format.UInt32 then
                     if bs.Length >= 5 then
                         let newValue = (uint32 bs.[1]) * 16777216u + (uint32 bs.[2]) * 65536u + (uint32 bs.[3]) * 256u + (uint32 bs.[4]) |> Value.UInt32
-                        let ars, vs = appendValue newValue arrayStores values
+                        let ars, vs = appendValue newValue sequencials values
                         _unpack bs.[5..] ars (consumed + 5) vs
                     else
                         MessagePackException("Attempt to unpack with non-compativle type") |> raise
@@ -591,28 +608,28 @@ module Unpacker =
                             (uint64 bs.[7]) * 256UL +
                             (uint64 bs.[8])
                             |> Value.UInt64
-                        let ars, vs = appendValue newValue arrayStores values
+                        let ars, vs = appendValue newValue sequencials values
                         _unpack bs.[9..] ars (consumed + 9) vs
                     else
                         MessagePackException("Attempt to unpack with non-compativle type") |> raise
                 elif header = Format.Int8 then
                     if bs.Length >= 2 then
                         let newValue = (sbyte bs.[1]) |> Value.Int8
-                        let ars, vs = appendValue newValue arrayStores values
+                        let ars, vs = appendValue newValue sequencials values
                         _unpack bs.[2..] ars (consumed + 2) vs
                     else
                         MessagePackException("Attempt to unpack with non-compativle type") |> raise
                 elif header = Format.Int16 then
                     if bs.Length >= 3 then
                         let newValue = (uint16 bs.[1]) * 256us + (uint16 bs.[2]) |> int16 |> Value.Int16
-                        let ars, vs = appendValue newValue arrayStores values
+                        let ars, vs = appendValue newValue sequencials values
                         _unpack bs.[3..] ars (consumed + 3) vs
                     else
                         MessagePackException("Attempt to unpack with non-compativle type") |> raise
                 elif header = Format.Int32 then
                     if bs.Length >= 5 then
                         let newValue = (uint32 bs.[1]) * 16777216u + (uint32 bs.[2]) * 65536u + (uint32 bs.[3]) * 256u + (uint32 bs.[4]) |> int |> Value.Int32
-                        let ars, vs = appendValue newValue arrayStores values
+                        let ars, vs = appendValue newValue sequencials values
                         _unpack bs.[5..] ars (consumed + 5) vs
                     else
                         MessagePackException("Attempt to unpack with non-compativle type") |> raise
@@ -629,7 +646,7 @@ module Unpacker =
                             (uint64 bs.[8])
                             |> int64
                             |> Value.Int64
-                        let ars, vs = appendValue newValue arrayStores values
+                        let ars, vs = appendValue newValue sequencials values
                         _unpack bs.[9..] ars (consumed + 9) vs
                     else
                         MessagePackException("Attempt to unpack with non-compativle type") |> raise
@@ -638,7 +655,7 @@ module Unpacker =
                         let length = int(bs.[1])
                         if bs.Length - 2 >= length then
                             let newValue = System.Text.Encoding.UTF8.GetString(bs.[2..(length+1)]) |> Value.String
-                            let ars, vs = appendValue newValue arrayStores values
+                            let ars, vs = appendValue newValue sequencials values
                             _unpack bs.[(length+2)..] ars (consumed + (length+2)) vs
                         else
                             MessagePackException("Attempt to unpack with non-compatible type") |> raise
@@ -649,7 +666,7 @@ module Unpacker =
                         let length = int(bs.[1]) * 256 + int(bs.[2])
                         if bs.Length - 3 >= length then
                             let newValue = System.Text.Encoding.UTF8.GetString(bs.[3..(length+2)]) |> Value.String
-                            let ars, vs = appendValue newValue arrayStores values
+                            let ars, vs = appendValue newValue sequencials values
                             _unpack bs.[(length+3)..] ars (consumed + (length+3)) vs
                         else
                             MessagePackException("Attempt to unpack with non-compatible type") |> raise
@@ -663,7 +680,7 @@ module Unpacker =
                                      int(bs.[4])
                         if bs.Length - 5 >= length then
                             let newValue = System.Text.Encoding.UTF8.GetString(bs.[5..(length+4)]) |> Value.String
-                            let ars, vs = appendValue newValue arrayStores values
+                            let ars, vs = appendValue newValue sequencials values
                             _unpack bs.[(length+5)..] ars (consumed + (length+5)) vs
                         else
                             MessagePackException("Attempt to unpack with non-compatible type") |> raise
@@ -673,7 +690,7 @@ module Unpacker =
                     if bs.Length >= 3 then
                         let length = int(bs.[1]) * 256 + int(bs.[2])
                         if bs.Length - 3 >= length then
-                            _unpack bs.[3..] ({ Count = length; ArrayValues = Array.init length (fun _ -> Value.Nil) }::arrayStores) (consumed + 3) values
+                            _unpack bs.[3..] ((ArrayStore(length, Array.init length (fun _ -> Value.Nil)))::sequencials) (consumed + 3) values
                         else
                             MessagePackException("Attempt to unpack with non-compatible type") |> raise
                     else
@@ -685,14 +702,35 @@ module Unpacker =
                                      int(bs.[3]) * 256 +
                                      int(bs.[4])
                         if bs.Length - 5 >= length then
-                            _unpack bs.[5..] ({ Count = length; ArrayValues = Array.init length (fun _ -> Value.Nil) }::arrayStores) (consumed + 5) values
+                            _unpack bs.[5..] ((ArrayStore(length, Array.init length (fun _ -> Value.Nil)))::sequencials) (consumed + 5) values
+                        else
+                            MessagePackException("Attempt to unpack with non-compatible type") |> raise
+                    else
+                        MessagePackException("Attempt to unpack with non-compativle type") |> raise
+                elif header = Format.Map16 then
+                    if bs.Length >= 3 then
+                        let length = int(bs.[1]) * 256 + int(bs.[2])
+                        if bs.Length - 3 >= length * 2 then
+                            _unpack bs.[3..] ((MapStore(length, Value.Nil, Map.ofList []))::sequencials) (consumed + 3) values
+                        else
+                            MessagePackException("Attempt to unpack with non-compatible type") |> raise
+                    else
+                        MessagePackException("Attempt to unpack with non-compativle type") |> raise
+                elif header = Format.Map32 then
+                    if bs.Length >= 5 then
+                        let length = int(bs.[1]) * 16777216 +
+                                     int(bs.[2]) * 65536 +
+                                     int(bs.[3]) * 256 +
+                                     int(bs.[4])
+                        if bs.Length - 5 >= length * 2 then
+                            _unpack bs.[5..] ((MapStore(length, Value.Nil, Map.ofList []))::sequencials) (consumed + 5) values
                         else
                             MessagePackException("Attempt to unpack with non-compatible type") |> raise
                     else
                         MessagePackException("Attempt to unpack with non-compativle type") |> raise
                 elif (header &&& 0b11100000uy) = 0b11100000uy then
                     let newValue = sbyte header |> Value.Int8
-                    let ars, vs = appendValue newValue arrayStores values
+                    let ars, vs = appendValue newValue sequencials values
                     _unpack bs.[1..] ars (consumed + 1) vs
                 else
                     values, consumed
