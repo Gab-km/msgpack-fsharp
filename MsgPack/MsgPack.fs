@@ -155,18 +155,6 @@ module internal Utility =
                     Byte7 = (if bs.Length >= 8 then bs.[7] else 0uy))
         d.Value
 
-    let seq_prepend source element =
-        seq {
-            yield element
-            yield! source
-        }
-
-    let seq_append source element =
-        seq {
-            yield! source
-            yield element
-        }
-
 module Packer =
     [<CompiledName("PackBool")>]
     let packBool value =
@@ -468,7 +456,7 @@ module Unpacker =
         | MapStore of int * Value * Map<Value, Value>
     [<CompiledName("Unpack")>]
     let unpack (bs: byte[]) =
-        let appendValue (newValue: Value) (sequencials: Sequencials list) (values: seq<Value>) =
+        let appendValue (newValue: Value) (sequencials: Sequencials list) (values: Value list) =
             let mutable nv, ars, vs, doLoop = newValue, sequencials, values, true
             while doLoop do
                 match ars with
@@ -494,10 +482,10 @@ module Unpacker =
                         ars <- (MapStore(newCount, Value.Nil, newMap))::xs
                         doLoop <- false
                 | _ ->
-                    vs <- Utility.seq_append vs nv
+                    vs <- nv::vs
                     doLoop <- false
             ars, vs
-        let rec _unpack (bs: byte[]) (sequencials: Sequencials list) (values: seq<Value>) =
+        let rec _unpack (bs: byte[]) (sequencials: Sequencials list) (values: Value list) =
             if bs.Length = 0 then values
             else
                 let header = bs.[0]
@@ -812,5 +800,5 @@ module Unpacker =
                     let ars, vs = appendValue newValue sequencials values
                     _unpack bs.[1..] ars vs
                 else
-                    values
+                    List.rev values
         _unpack bs [] []
