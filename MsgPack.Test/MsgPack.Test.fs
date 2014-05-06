@@ -602,6 +602,26 @@ module UnpackTest =
         Array.append [| 0xC6uy; 0x00uy; 0x01uy; 0x00uy; 0x00uy |] bs |> Unpacker.unpack |> assertEquivalentTo (seq [Value.Bin bs])
 
     [<Test>]
+    let ``Given 0xC7FF01 and 255-length of 0xFF array When unpack Then return seq [Value.Ext (1, 255-length of 0xFF)]`` () =
+        let bs = Array.init 255 (fun _ -> 0xFFuy)
+        Array.append [| 0xC7uy; 0xFFuy; 0x01uy |] bs |> Unpacker.unpack |> assertEquivalentTo (seq [Value.Ext(1y, bs)])
+
+    [<Test>]
+    let ``Given 0xC8010002 and 256-length of 0x20 array When unpack Then return seq [Value.Ext (2, 256-length of 0x20)]`` () =
+        let bs = Array.init 256 (fun _ -> 0x20uy)
+        Array.append [| 0xC8uy; 0x01uy; 0x00uy; 0x02uy |] bs |> Unpacker.unpack |> assertEquivalentTo (seq [Value.Ext(2y, bs)])
+
+    [<Test>]
+    let ``Given 0xC8FFFF03 and 65535-length of 0x30 array When unpack Then return seq [Value.Ext (3, 65535-length 0f 0x30)]`` () =
+        let bs = Array.init 65535 (fun _ -> 0x30uy)
+        Array.append [| 0xC8uy; 0xFFuy; 0xFFuy; 0x03uy |] bs |> Unpacker.unpack |> assertEquivalentTo (seq [Value.Ext(3y, bs)])
+
+    [<Test>]
+    let ``Given 0xC90001000004 and 65536-length of 0x41 array When unpack Then return seq [Value.Ext (4, 65536-length of 0x41)]`` () =
+        let bs = Array.init 65536 (fun _ -> 0x41uy)
+        Array.append [| 0xC9uy; 0x00uy; 0x01uy; 0x00uy; 0x00uy; 0x04uy |] bs |> Unpacker.unpack |> assertEquivalentTo (seq [Value.Ext(4y, bs)])
+
+    [<Test>]
     let ``Given 0xCA3E200000 When unpack Then return seq [Value.Float32 0.15625]`` () =
         Unpacker.unpack [| 0XCAuy; 0x3Euy; 0x20uy; 0x00uy; 0x00uy |] |> assertEquivalentTo (seq [Value.Float32 0.15625f])
 
@@ -682,7 +702,28 @@ module UnpackTest =
         Unpacker.unpack [| 0xD3uy; 0x80uy; 0x00uy; 0x00uy; 0x00uy; 0x00uy; 0x00uy; 0x00uy; 0x00uy |] |> assertEquivalentTo (seq [Value.Int64 (-9223372036854775808L)])
 
     [<Test>]
-    let ``Given 0xD920 and 32-length of 0x41 array When unpack Then return seq [Value.String (32-length 0f "A")]`` () =
+    let ``Given 0xD405FF When unpack Then return seq [Value.Ext (5, [| 0xFF |])]`` () =
+        [| 0xD4uy; 0x05uy; 0xFFuy |] |> Unpacker.unpack |> assertEquivalentTo (seq [Value.Ext (5y, [| 0xFFuy |])])
+
+    [<Test>]
+    let ``Given 0xD5062030 When unpack Then return seq [Value.Ext (6, [| 0x20; 0x30 |])]`` () =
+        [| 0xD5uy; 0x06uy; 0x20uy; 0x30uy |] |> Unpacker.unpack |> assertEquivalentTo (seq [Value.Ext (6y, [| 0x20uy; 0x30uy |])])
+
+    [<Test>]
+    let ``Given 0xD607FF203041 When unpack Then return seq [Value.Ext (7, [| 0xFF; 0x20; 0x30; 0x41 |])]`` () =
+        [| 0xD6uy; 0x07uy; 0xFFuy; 0x20uy; 0x30uy; 0x41uy |] |> Unpacker.unpack |> assertEquivalentTo (seq [Value.Ext (7y, [| 0xFFuy; 0x20uy; 0x30uy; 0x41uy |])])
+
+    [<Test>]
+    let ``Given 0xD708203041FF203041FF When unpack Then return seq [Value.Ext (8, [| 0x20; 0x30; 0x41; 0xFF; 0x20; 0x30; 0x41; 0xFF |])]`` () =
+        [| 0xD7uy; 0x08uy; 0x20uy; 0x30uy; 0x41uy; 0xFFuy; 0x20uy; 0x30uy; 0x41uy; 0xFFuy |] |> Unpacker.unpack |> assertEquivalentTo (seq [Value.Ext (8y, [| 0x20uy; 0x30uy; 0x41uy; 0xFFuy; 0x20uy; 0x30uy; 0x41uy; 0xFFuy |])])
+
+    [<Test>]
+    let ``Given 0xD809202020203041304130413041FFFFFFFF When unpack Then return seq [Value.Ext (9, [| 0x20; 0x20; 0x20; 0x20; 0x30; 0x41; 0x30; 0x41; 0x30; 0x41; 0x30; 0x41; 0xFF; 0xFF; 0xFF; 0xFF |])]`` () =
+        let bs = [| 0xD8uy; 0x09uy; 0x20uy; 0x20uy; 0x20uy; 0x20uy; 0x30uy; 0x41uy; 0x30uy; 0x41uy; 0x30uy; 0x41uy; 0x30uy; 0x41uy; 0xFFuy; 0xFFuy; 0xFFuy; 0xFFuy |]
+        Unpacker.unpack bs |> assertEquivalentTo (seq [Value.Ext (9y, bs.[2..])])
+
+    [<Test>]
+    let ``Given 0xD920 and 32-length of 0x41 array When unpack Then return seq [Value.String (32-length of "A")]`` () =
         Array.append [| 0xD9uy; 0x20uy |] (Array.init 32 (fun _ -> 0x41uy)) |> Unpacker.unpack |> assertEquivalentTo (seq [Value.String (System.String('A', 32))])
     
     [<Test>]
@@ -707,13 +748,13 @@ module UnpackTest =
         let expected = Array.init 16 (fun _ -> Value.Nil)
         Array.append [| 0xDCuy; 0x00uy; 0x10uy |] bs |> Unpacker.unpack |> assertEquivalentTo (seq [Value.Array(expected)])
 
-    [<Test>]
+    [<Test; Category("TooSlowTest")>]
     let ``Given 0xDCFFFF and 65535-length of 0xC2 array When unpack Then return seq [Value.Array (65535-length of Value.Bool false)]`` () =
         let bs = Array.init 65535 (fun _ -> 0xC2uy)
         let expected = Array.init 65535 (fun _ -> Value.Bool false)
         Array.append [| 0xDCuy; 0xFFuy; 0xFFuy |] bs |> Unpacker.unpack |> assertEquivalentTo (seq [Value.Array(expected)])
 
-    [<Test>]
+    [<Test; Category("TooSlowTest")>]
     let ``Given 0xDD00010000 and 65536-length of 0xC3 array When unpack Then return seq [Value.Array (65536-length of Value.Bool true)]`` () =
         let bs = Array.init 65536 (fun _ -> 0xC3uy)
         let expected = Array.init 65536 (fun _ -> Value.Bool true)
@@ -725,7 +766,7 @@ module UnpackTest =
         let expected = List.init 16 (fun i -> (i |> byte |> Value.UInt8), if i % 2 = 0 then Value.Bool false else Value.Bool true) |> Map.ofList
         Array.append [| 0xDEuy; 0x00uy; 0x10uy |] bs |> Unpacker.unpack |> assertEquivalentTo (seq [Value.Map(expected)])
 
-    [<Test>]
+    [<Test; Category("TooSlowTest")>]
     let ``Given 0xDEFFFF and 65535-length of key value collections When unpack Then return seq [Value.Map (65535-length of (int format family, bool format family))]`` () =
         let bs = Array.init 65535 (fun i -> Array.append (Packer.packInt i) [| (if i % 2 = 0 then 0xC2uy else 0xC3uy) |]) |> Array.concat
         let expected =
@@ -739,7 +780,7 @@ module UnpackTest =
             |> Map.ofList
         Array.append [| 0xDEuy; 0xFFuy; 0xFFuy |] bs |> Unpacker.unpack |> assertEquivalentTo (seq [Value.Map(expected)])
 
-    [<Test>]
+    [<Test; Category("TooSlowTest")>]
     let ``Given 0xDF00010000 and 65536-length of key value collections When unpack Then return seq [Value.Map (65536-length of (int format family, bool format family))]`` () =
         let bs = Array.init 65536 (fun i -> Array.append (Packer.packInt i) [| 0xC3uy |]) |> Array.concat
         let expected =

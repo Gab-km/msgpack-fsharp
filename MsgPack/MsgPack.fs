@@ -561,6 +561,45 @@ module Unpacker =
                         _unpack bs.[(length+5)..] ars (consumed + (length+5)) vs
                     else
                         MessagePackException("Attempt to unpack with non-compatible type") |> raise
+                elif (header = Format.Ext8) then
+                    if bs.Length >= 3 then
+                        let length = int(bs.[1])
+                        if bs.Length - 3 >= length then
+                            let t = sbyte(bs.[2])
+                            let d = bs.[3..(length+2)]
+                            let ars, vs = appendValue (Value.Ext(t, d)) sequencials values
+                            _unpack bs.[(length+3)..] ars (consumed + (length+3)) vs
+                        else
+                            MessagePackException("Attempt to unpack with non-compatible type") |> raise
+                    else
+                        MessagePackException("Attempt to unpack with non-compatible type") |> raise
+                elif (header = Format.Ext16) then
+                    if bs.Length >= 4 then
+                        let length = int(bs.[1]) * 256 + int(bs.[2])
+                        if bs.Length - 4 >= length then
+                            let t = sbyte(bs.[3])
+                            let d = bs.[4..(length+3)]
+                            let ars, vs = appendValue (Value.Ext(t, d)) sequencials values
+                            _unpack bs.[(length+4)..] ars (consumed + (length+4)) vs
+                        else
+                            MessagePackException("Attempt to unpack with non-compatible type") |> raise
+                    else
+                        MessagePackException("Attempt to unpack with non-compatible type") |> raise
+                elif (header = Format.Ext32) then
+                    if bs.Length >= 6 then
+                        let length = int(bs.[1]) * 16777216 +
+                                     int(bs.[2]) * 65536 +
+                                     int(bs.[3]) * 256 +
+                                     int(bs.[4])
+                        if bs.Length - 6 >= length then
+                            let t = sbyte(bs.[5])
+                            let d = bs.[6..(length+5)]
+                            let ars, vs = appendValue (Value.Ext(t, d)) sequencials values
+                            _unpack bs.[(length+6)..] ars (consumed + (length+6)) vs
+                        else
+                            MessagePackException("Attempt to unpack with non-compatible type") |> raise
+                    else
+                        MessagePackException("Attempt to unpack with non-compatible type") |> raise
                 elif (header = Format.Float32) then
                     if bs.Length >= 5 then
                         let newValue = Utility.convertEndianFromBytesToFloat32(bs.[1..4]) |> Value.Float32
@@ -648,6 +687,46 @@ module Unpacker =
                             |> Value.Int64
                         let ars, vs = appendValue newValue sequencials values
                         _unpack bs.[9..] ars (consumed + 9) vs
+                    else
+                        MessagePackException("Attempt to unpack with non-compativle type") |> raise
+                elif header = Format.FixExt1 then
+                    if bs.Length >= 3 then
+                        let t = sbyte(bs.[1])
+                        let d = [| bs.[2] |]
+                        let ars, vs = appendValue (Value.Ext (t, d)) sequencials values
+                        _unpack bs.[3..] ars (consumed + 3) vs
+                    else
+                        MessagePackException("Attempt to unpack with non-compativle type") |> raise
+                elif header = Format.FixExt2 then
+                    if bs.Length >= 4 then
+                        let t = sbyte(bs.[1])
+                        let d = bs.[2..3]
+                        let ars, vs = appendValue (Value.Ext (t, d)) sequencials values
+                        _unpack bs.[4..] ars (consumed + 4) vs
+                    else
+                        MessagePackException("Attempt to unpack with non-compativle type") |> raise
+                elif header = Format.FixExt4 then
+                    if bs.Length >= 6 then
+                        let t = sbyte(bs.[1])
+                        let d = bs.[2..5]
+                        let ars, vs = appendValue (Value.Ext (t, d)) sequencials values
+                        _unpack bs.[6..] ars (consumed + 6) vs
+                    else
+                        MessagePackException("Attempt to unpack with non-compativle type") |> raise
+                elif header = Format.FixExt8 then
+                    if bs.Length >= 10 then
+                        let t = sbyte(bs.[1])
+                        let d = bs.[2..9]
+                        let ars, vs = appendValue (Value.Ext (t, d)) sequencials values
+                        _unpack bs.[10..] ars (consumed + 10) vs
+                    else
+                        MessagePackException("Attempt to unpack with non-compativle type") |> raise
+                elif header = Format.FixExt16 then
+                    if bs.Length >= 18 then
+                        let t = sbyte(bs.[1])
+                        let d = bs.[2..17]
+                        let ars, vs = appendValue (Value.Ext (t, d)) sequencials values
+                        _unpack bs.[18..] ars (consumed + 18) vs
                     else
                         MessagePackException("Attempt to unpack with non-compativle type") |> raise
                 elif header = Format.Str8 then
