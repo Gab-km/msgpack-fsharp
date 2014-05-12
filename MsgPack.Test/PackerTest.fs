@@ -427,20 +427,20 @@ module PackBinTest =
 [<TestFixture>]
 module PackArrayTest =
     [<Test>]
-    let ``Given UInt8 array of [| 0 1 2 3 |] When pack Then return 0x9400010203`` () =
-        let sut = Value.Array [| Value.UInt8(0uy); Value.UInt8(1uy); Value.UInt8(2uy); Value.UInt8(3uy) |] |> Packer.pack
+    let ``Given UInt8 array of [| 0 1 2 3 |] When packOne Then return 0x9400010203`` () =
+        let sut = Value.Array [| Value.UInt8(0uy); Value.UInt8(1uy); Value.UInt8(2uy); Value.UInt8(3uy) |] |> Packer.packOne
         sut |> assertEquivalentTo [| 0x94uy; 0x00uy; 0x01uy; 0x02uy; 0x03uy |]
 
     [<Test>]
-    let ``Given a 16-length Bool array of [| true .. true |] When pack Then return byte[] and its format header is 0xDC and its length is 19`` () =
-        let sut = Array.create 16 (Value.Bool true) |> fun arr -> Value.Array arr |> Packer.pack
+    let ``Given a 16-length Bool array of [| true .. true |] When packOne Then return byte[] and its format header is 0xDC and its length is 19`` () =
+        let sut = Array.create 16 (Value.Bool true) |> fun arr -> Value.Array arr |> Packer.packOne
         sut.Length |> assertEqualTo 19
         sut.[0..2] |> assertEquivalentTo [| 0xDCuy; 0x00uy; 0x10uy |]
         sut.[3..(sut.Length-1)] |> assertEquivalentTo (Array.create 16 0xC3uy)
 
     [<Test>]
-    let ``Given a 65536-length String array of [| 'a' .. 'a' |] When pack Then return byte[] and its format header is 0xDD and its length is 131077`` () =
-        let sut = Array.create 65536 (Value.String "a") |> fun arr -> Value.Array arr |> Packer.pack
+    let ``Given a 65536-length String array of [| 'a' .. 'a' |] When packOne Then return byte[] and its format header is 0xDD and its length is 131077`` () =
+        let sut = Array.create 65536 (Value.String "a") |> fun arr -> Value.Array arr |> Packer.packOne
         sut.Length |> assertEqualTo 131077
         sut.[0..4] |> assertEquivalentTo [| 0xDDuy; 0x00uy; 0x01uy; 0x00uy; 0x00uy |]
         //sut.[5..(sut.Length-1)] |> assertEquivalentTo ((Array.create 65536 [| 0xA1uy; 0x61uy |]) |> Array.collect id)
@@ -448,31 +448,31 @@ module PackArrayTest =
 [<TestFixture>]
 module PackMapTest =
     [<Test>]
-    let ``Given {"compact": true, "schema": 0} When pack Then return 0x82A7636F6D70616374C3A6736368656D6100`` () =
-        let sut = Value.Map (Map.ofList [(Value.String("compact"), Value.Bool(true)); (Value.String("schema"), Value.UInt8(0uy))]) |> Packer.pack
+    let ``Given {"compact": true, "schema": 0} When packOne Then return 0x82A7636F6D70616374C3A6736368656D6100`` () =
+        let sut = Value.Map (Map.ofList [(Value.String("compact"), Value.Bool(true)); (Value.String("schema"), Value.UInt8(0uy))]) |> Packer.packOne
         sut |> assertEquivalentTo [| 0x82uy; 0xA7uy; 0x63uy; 0x6Fuy; 0x6Duy; 0x70uy; 0x61uy; 0x63uy; 0x74uy; 0xC3uy; 0xA6uy; 0x73uy; 0x63uy; 0x68uy; 0x65uy; 0x6Duy; 0x61uy; 0x00uy |]
 
     [<Test>]
-    let ``Given 15-length key-value pairs of {1: '1', ..., 15: 'F'} When pack Then return byte[] and its format header is 0x8F and its length is 46`` () =
-        let sut = [| for i in 1uy .. 15uy -> (Value.UInt8(i), Value.String(i.ToString("X"))) |] |> Map.ofArray |> Value.Map |> Packer.pack
+    let ``Given 15-length key-value pairs of {1: '1', ..., 15: 'F'} When packOne Then return byte[] and its format header is 0x8F and its length is 46`` () =
+        let sut = [| for i in 1uy .. 15uy -> (Value.UInt8(i), Value.String(i.ToString("X"))) |] |> Map.ofArray |> Value.Map |> Packer.packOne
         sut.Length |> assertEqualTo 46
         sut.[0] |> assertEqualTo 0x8Fuy
 
     [<Test>]
-    let ``Given 16-length key-value pairs of {1: true, ..., 16: false} When pack Then return byte[] and its format header is 0xDE and its length is 35`` () =
-        let sut = [| for i in 1uy .. 16uy -> (Value.UInt8(i), Value.Bool(i % 2uy = 0uy)) |] |> Map.ofArray |> Value.Map |> Packer.pack
+    let ``Given 16-length key-value pairs of {1: true, ..., 16: false} When packOne Then return byte[] and its format header is 0xDE and its length is 35`` () =
+        let sut = [| for i in 1uy .. 16uy -> (Value.UInt8(i), Value.Bool(i % 2uy = 0uy)) |] |> Map.ofArray |> Value.Map |> Packer.packOne
         sut.Length |> assertEqualTo 35
         sut.[0..2] |> assertEquivalentTo [| 0xDEuy; 0x00uy; 0x10uy |]
 
     [<Test>]
-    let ``Given 65535-length key-value pairs of {1: true, ..., 65535: true} When pack Then return byte[] and its format header is 0xDE and its length is 261761`` () =
-        let sut = [| for i in 1us .. 65535us -> (Value.UInt16(i), Value.Bool(i % 2us = 0us)) |] |> Map.ofArray |> Value.Map |> Packer.pack
+    let ``Given 65535-length key-value pairs of {1: true, ..., 65535: true} When packOne Then return byte[] and its format header is 0xDE and its length is 261761`` () =
+        let sut = [| for i in 1us .. 65535us -> (Value.UInt16(i), Value.Bool(i % 2us = 0us)) |] |> Map.ofArray |> Value.Map |> Packer.packOne
         sut.Length |> assertEqualTo 261761
         sut.[0..2] |> assertEquivalentTo [| 0xDEuy; 0xFFuy; 0xFFuy |]
 
     [<Test>]
-    let ``Given 65536-length key-value pairs of {1: true, ..., 65536: false} When pack Then return byte[] and its format header is 0xDF and its length 261769`` () =
-        let sut = [| for i in 1u .. 65536u -> (Value.UInt32(i), Value.Bool(i % 2u = 0u)) |] |> Map.ofArray |> Value.Map |> Packer.pack
+    let ``Given 65536-length key-value pairs of {1: true, ..., 65536: false} When packOne Then return byte[] and its format header is 0xDF and its length 261769`` () =
+        let sut = [| for i in 1u .. 65536u -> (Value.UInt32(i), Value.Bool(i % 2u = 0u)) |] |> Map.ofArray |> Value.Map |> Packer.packOne
         sut.Length |> assertEqualTo 261769
         sut.[0..4] |> assertEquivalentTo [| 0xDFuy; 0x00uy; 0x01uy; 0x00uy; 0x00uy |]
 
@@ -541,3 +541,9 @@ module PackExtTest =
         let sut = (13y, (Array.create 65536 0uy)) ||> Packer.packExt
         sut.Length |> assertEqualTo 65542
         sut.[0..4] |> assertEquivalentTo [| 0xC9uy; 0x00uy; 0x01uy; 0x00uy; 0x00uy |]
+
+[<TestFixture>]
+module PackerTest =
+    [<Test>]
+    let ``Given [Value.UInt8 1; Value.Bin [0x00; 0x01; 0x02]] When pack Then return 0x01C403000102`` () =
+        [Value.UInt8 1uy; Value.Bin [| 0x00uy; 0x01uy; 0x02uy |]] |> Packer.pack |> assertEquivalentTo [| 0x01uy; 0xC4uy; 0x03uy; 0x00uy; 0x01uy; 0x02uy |]

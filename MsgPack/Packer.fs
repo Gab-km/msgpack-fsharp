@@ -240,8 +240,8 @@ module Packer =
                    byte (t) |]
                 bs
 
-    [<CompiledName("Pack")>]
-    let rec pack = function
+    [<CompiledName("PackOne")>]
+    let rec packOne = function
         //TODO: change signature to seq<Value> -> byte[]
         | Value.Nil -> packNil()
         | Value.Bool b -> packBool b
@@ -258,7 +258,7 @@ module Packer =
         | Value.String s -> packString s
         | Value.Bin b -> packBin b
         | Value.Array arr ->
-            let fmapped = Array.collect pack arr
+            let fmapped = Array.collect packOne arr
             let length = arr.Length
             if length <= 15 then Array.append
                                     [| byte (0b10010000 + length) |]
@@ -277,7 +277,7 @@ module Packer =
                     fmapped
         | Value.Map m ->
             let length = m.Count
-            let flatten = Map.toArray m |> Array.collect (fun (k, v) -> Array.append (pack k) (pack v))
+            let flatten = Map.toArray m |> Array.collect (fun (k, v) -> Array.append (packOne k) (packOne v))
             if length <= 15 then Array.append
                                     [| byte (0b10000000 + length) |]
                                     flatten
@@ -294,3 +294,6 @@ module Packer =
                        byte (length &&& 0x000000FF) |]
                     flatten
         | Value.Ext (i, b) -> packExt i b
+
+    [<CompiledName("Pack")>]
+    let pack (values: Value list) = values |> List.map packOne |> Array.concat
