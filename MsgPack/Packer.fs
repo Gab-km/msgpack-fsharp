@@ -27,7 +27,7 @@ module Packer =
         else
             [| Format.UInt16
                byte (value >>> 8)
-               byte ((value <<< 8) >>> 8) |]
+               byte (value &&& 0x00FFus) |]
 
     [<CompiledName("PackUInt")>]
     let packUInt32 value =
@@ -41,13 +41,13 @@ module Packer =
             if value < (1u <<< 16) then
                 [| Format.UInt16
                    byte (value >>> 8)
-                   byte ((value <<< 8) >>> 8) |]
+                   byte (value &&& 0x00FFu) |]
             else
                 [| Format.UInt32
                    byte (value >>> 24)
-                   byte (((value >>> 16) <<< 24) >>> 24)
-                   byte (((value >>> 8) <<< 24) >>> 24)
-                   byte ((value <<< 24) >>> 24) |]
+                   byte ((value &&& 0x00FF0000u) >>> 16)
+                   byte ((value &&& 0x0000FF00u) >>> 8)
+                   byte (value &&& 0x000000FFu) |]
 
     [<CompiledName("PackULong")>]
     let packUInt64 value =
@@ -61,23 +61,23 @@ module Packer =
             if value < (1UL <<< 16) then
                 [| Format.UInt16
                    byte (value >>> 8)
-                   byte ((value <<< 8) >>> 8) |]
+                   byte (value &&& 0x00FFUL) |]
             elif value < (1UL <<< 32) then
                 [| Format.UInt32
                    byte (value >>> 24)
-                   byte (((value >>> 16) <<< 24) >>> 24)
-                   byte (((value >>> 8) <<< 24) >>> 24)
-                   byte ((value <<< 24) >>> 24) |]
+                   byte ((value &&& 0x00FF0000UL) >>> 16)
+                   byte ((value &&& 0x0000FF00UL) >>> 8)
+                   byte (value &&& 0x000000FFUL) |]
             else
                 [| Format.UInt64
                    byte (value >>> 56)
-                   byte (((value >>> 48) <<< 56) >>> 56)
-                   byte (((value >>> 40) <<< 56) >>> 56)
-                   byte (((value >>> 32) <<< 56) >>> 56)
-                   byte (((value >>> 24) <<< 56) >>> 56)
-                   byte (((value >>> 16) <<< 56) >>> 56)
-                   byte (((value >>> 8) <<< 56) >>> 56)
-                   byte ((value <<< 56) >>> 56) |]
+                   byte ((value &&& 0x00FF000000000000UL) >>> 48)
+                   byte ((value &&& 0x0000FF0000000000UL) >>> 40)
+                   byte ((value &&& 0x000000FF00000000UL) >>> 32)
+                   byte ((value &&& 0x00000000FF000000UL) >>> 24)
+                   byte ((value &&& 0x0000000000FF0000UL) >>> 16)
+                   byte ((value &&& 0x000000000000FF00UL) >>> 8)
+                   byte (value &&& 0x00000000000000FFUL) |]
 
     [<CompiledName("PackSByte")>]
     let packSByte value =
@@ -93,7 +93,7 @@ module Packer =
             if value < -(1s <<< 7) then
                 [| Format.Int16
                    byte (value >>> 8)
-                   byte ((value <<< 8) >>> 8) |]
+                   byte (value &&& 0x00FFs) |]
             else
                 [| Format.Int8
                    byte value |]
@@ -109,13 +109,13 @@ module Packer =
             if value < -(1 <<< 15) then
                 [| Format.Int32
                    byte (value >>> 24)
-                   byte (((value >>> 16) <<< 24) >>> 24)
-                   byte (((value >>> 8) <<< 24) >>> 24)
-                   byte ((value <<< 24) >>> 24) |]
+                   byte ((value &&& 0x00FF0000) >>> 16)
+                   byte ((value &&& 0x0000FF00) >>> 8)
+                   byte (value &&& 0x000000FF) |]
             elif value < -(1 <<< 7) then
                 [| Format.Int16
                    byte (value >>> 8)
-                   byte ((value <<< 8) >>> 8) |]
+                   byte (value &&& 0x00FF) |]
             else
                 [| Format.Int8
                    byte value |]
@@ -132,13 +132,13 @@ module Packer =
                 if value < -(1L <<< 31) then
                     [| Format.Int64
                        byte (value >>> 56)
-                       byte (((value >>> 48) <<< 56) >>> 56)
-                       byte (((value >>> 40) <<< 56) >>> 56)
-                       byte (((value >>> 32) <<< 56) >>> 56)
-                       byte (((value >>> 24) <<< 56) >>> 56)
-                       byte (((value >>> 16) <<< 56) >>> 56)
-                       byte (((value >>> 8) <<< 56) >>> 56)
-                       byte ((value <<< 56) >>> 56) |]
+                       byte ((value &&& 0x00FF000000000000L) >>> 48)
+                       byte ((value &&& 0x0000FF0000000000L) >>> 40)
+                       byte ((value &&& 0x000000FF00000000L) >>> 32)
+                       byte ((value &&& 0x00000000FF000000L) >>> 24)
+                       byte ((value &&& 0x0000000000FF0000L) >>> 16)
+                       byte ((value &&& 0x000000000000FF00L) >>> 8)
+                       byte (value &&& 0x00000000000000FFL) |]
                 else
                     value |> int32 |> packInt
             else
@@ -188,12 +188,12 @@ module Packer =
                                 bytes       // string whose length is upto 2^8-1.
         | Str16 length  -> Array.append
                                 [| Format.Str16
-                                   byte ((length &&& 0xFF00) >>> 8)
+                                   byte (length >>> 8)
                                    byte (length &&& 0x00FF) |]
                                 bytes       // string whose length is upto 2^16-1.
         | _             -> Array.append
                                 [| Format.Str32
-                                   byte ((length &&& 0xFF000000) >>> 24)
+                                   byte (length >>> 24)
                                    byte ((length &&& 0x00FF0000) >>> 16)
                                    byte ((length &&& 0x0000FF00) >>> 8)
                                    byte (length &&& 0x000000FF) |]
@@ -205,12 +205,12 @@ module Packer =
         if length <= 255 then Array.append [| Format.Bin8; byte(length) |] bs
         elif length <= 65535 then Array.append
                                     [| Format.Bin16
-                                       byte ((length &&& 0xFF00) >>> 8)
+                                       byte (length >>> 8)
                                        byte (length &&& 0x00FF) |]
                                     bs
         else Array.append
                 [| Format.Bin32
-                   byte ((length &&& 0xFF000000) >>> 24)
+                   byte (length >>> 24)
                    byte ((length &&& 0x00FF0000) >>> 16)
                    byte ((length &&& 0x0000FF00) >>> 8)
                    byte (length &&& 0x000000FF) |]
@@ -227,13 +227,13 @@ module Packer =
         elif length <= 255 then Array.append [| Format.Ext8; byte(length); byte(t) |] bs
         elif length <= 65535 then Array.append
                                     [| Format.Ext16
-                                       byte ((length &&& 0xFF00) >>> 8)
+                                       byte (length >>> 8)
                                        byte (length &&& 0x00FF)
                                        byte (t) |]
                                     bs
         else Array.append
                 [| Format.Ext32
-                   byte ((length &&& 0xFF000000) >>> 24)
+                   byte (length >>> 24)
                    byte ((length &&& 0x00FF0000) >>> 16)
                    byte ((length &&& 0x0000FF00) >>> 8)
                    byte (length &&& 0x000000FF)
@@ -265,12 +265,12 @@ module Packer =
                                     fmapped
             elif length <= 65535 then Array.append
                                         [| Format.Array16
-                                           byte ((length &&& 0xFF00) >>> 8)
+                                           byte (length >>> 8)
                                            byte (length &&& 0x00FF) |]
                                         fmapped
             else Array.append
                     [| Format.Array32
-                       byte ((length &&& 0xFF000000) >>> 24)
+                       byte (length >>> 24)
                        byte ((length &&& 0x00FF0000) >>> 16)
                        byte ((length &&& 0x0000FF00) >>> 8)
                        byte (length &&& 0x000000FF) |]
@@ -283,12 +283,12 @@ module Packer =
                                     flatten
             elif length <= 65535 then Array.append
                                         [| Format.Map16
-                                           byte ((length &&& 0xFF00) >>> 8)
+                                           byte (length >>> 8)
                                            byte (length &&& 0x00FF) |]
                                         flatten
             else Array.append
                     [| Format.Map32
-                       byte ((length &&& 0xFF000000) >>> 24)
+                       byte (length >>> 24)
                        byte ((length &&& 0x00FF0000) >>> 16)
                        byte ((length &&& 0x0000FF00) >>> 8)
                        byte (length &&& 0x000000FF) |]
