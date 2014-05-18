@@ -1,61 +1,65 @@
 ﻿namespace MsgPack
 
 module Unpacker =
+    open System.Collections.Generic
+
     type internal Sequencials =
         | ArrayStore of int * Value []
         | MapStore of int * Value * Map<Value, Value>
 
     [<CompiledName("Unpack")>]
     let unpack (bs: byte[]) =
-        let appendValue (newValue: Value) (sequencials: Sequencials list) (values: Value list) =
-            let mutable nv, ars, vs, doLoop = newValue, sequencials, values, true
+        let appendValue (newValue: Value) (sequencials: Stack<Sequencials>) (values: List<Value>) =
+            let mutable nv, doLoop = newValue, true
             while doLoop do
-                match ars with
-                | (ArrayStore (count, arrayValues))::xs ->
-                    arrayValues.[arrayValues.Length - count] <- nv
-                    let newCount = count - 1
-                    if newCount = 0 then
-                        ars <- xs
-                        nv <- Value.Array arrayValues
-                    else
-                        ars <- (ArrayStore(newCount, arrayValues))::xs
+                if sequencials.Count > 0 then
+                    let elm = sequencials.Pop()
+                    match elm with
+                    | ArrayStore (count, arrayValues) ->
+                        arrayValues.[arrayValues.Length - count] <- nv
+                        let newCount = count - 1
+                        if newCount = 0 then
+                            nv <- Value.Array arrayValues
+                        else
+                            sequencials.Push(ArrayStore(newCount, arrayValues))
+                            doLoop <- false
+                    | MapStore (count, Value.Nil, mapValues) ->
+                        sequencials.Push(MapStore(count, newValue, mapValues))
                         doLoop <- false
-                | (MapStore (count, Value.Nil, mapValues))::xs ->
-                    ars <- (MapStore(count, newValue, mapValues))::xs
+                    | MapStore (count, key, mapValues) ->
+                        let newMap = Map.add key newValue mapValues
+                        let newCount = count - 1
+                        if newCount = 0 then
+                            nv <- Value.Map newMap
+                        else
+                            sequencials.Push(MapStore(newCount, Value.Nil, newMap))
+                            doLoop <- false
+                else
+                    values.Add(nv)
                     doLoop <- false
-                | (MapStore (count, key, mapValues))::xs ->
-                    let newMap = Map.add key newValue mapValues
-                    let newCount = count - 1
-                    if newCount = 0 then
-                        ars <- xs
-                        nv <- Value.Map newMap
-                    else
-                        ars <- (MapStore(newCount, Value.Nil, newMap))::xs
-                        doLoop <- false
-                | _ ->
-                    vs <- nv::vs
-                    doLoop <- false
-            ars, vs
+            sequencials, values
 
-        let _unpackPositiveFixint (bytes: byte[]) (sequencials: Sequencials list) (values: Value list) =
+        let _unpackPositiveFixint (bytes: byte[]) (sequencials: Stack<Sequencials>) (values: List<Value>) =
             let ars, vs = appendValue (Value.UInt8 bytes.[0]) sequencials values
             bytes.[1..], ars, vs
 
-        let _unpackFixmap (bytes: byte[]) (sequencials: Sequencials list) =
+        let _unpackFixmap (bytes: byte[]) (sequencials: Stack<Sequencials>) =
             let length = int(bytes.[0] &&& 0b00001111uy)
             if bytes.Length - 1 >= length then
-                bytes.[1..], MapStore(length, Value.Nil, Map.ofList [])::sequencials
+                sequencials.Push(MapStore(length, Value.Nil, Map.ofList []))
+                bytes.[1..], sequencials
             else
                 MessagePackException("Attempt to unpack with non-compatible type") |> raise
 
-        let _unpackFixarray (bytes: byte[]) (sequencials: Sequencials list) =
+        let _unpackFixarray (bytes: byte[]) (sequencials: Stack<Sequencials>) =
             let length = int(bytes.[0] &&& 0b00001111uy)
             if bytes.Length - 1 >= length then
-                bytes.[1..], (ArrayStore(length, Array.init length (fun _ -> Value.Nil)))::sequencials
+                sequencials.Push(ArrayStore(length, Array.init length (fun _ -> Value.Nil)))
+                bytes.[1..], sequencials
             else
                 MessagePackException("Attempt to unpack with non-compatible type") |> raise
 
-        let _unpackFixstr (bytes: byte[]) (sequencials: Sequencials list) (values: Value list) =
+        let _unpackFixstr (bytes: byte[]) (sequencials: Stack<Sequencials>) (values: List<Value>) =
             let length = int(bytes.[0] &&& 0b00011111uy)
             if bytes.Length - 1 >= length then
                 let newValue = System.Text.Encoding.UTF8.GetString(bytes.[1..length]) |> Value.String
@@ -64,19 +68,19 @@ module Unpacker =
             else
                 MessagePackException("Attempt to unpack with non-compatible type") |> raise
 
-        let _unpackNil (bytes: byte[]) (sequencials: Sequencials list) (values: Value list) =
+        let _unpackNil (bytes: byte[]) (sequencials: Stack<Sequencials>) (values: List<Value>) =
             let ars, vs = appendValue Value.Nil sequencials values
             bytes.[1..], ars, vs
 
-        let _unpackFalse (bytes: byte[]) (sequencials: Sequencials list) (values: Value list) =
+        let _unpackFalse (bytes: byte[]) (sequencials: Stack<Sequencials>) (values: List<Value>) =
             let ars, vs = appendValue (Value.Bool false) sequencials values
             bytes.[1..], ars, vs
 
-        let _unpackTrue (bytes: byte[]) (sequencials: Sequencials list) (values: Value list) =
+        let _unpackTrue (bytes: byte[]) (sequencials: Stack<Sequencials>) (values: List<Value>) =
             let ars, vs = appendValue (Value.Bool true) sequencials values
             bytes.[1..], ars, vs
 
-        let _unpackBin8 (bytes: byte[]) (sequencials: Sequencials list) (values: Value list) =
+        let _unpackBin8 (bytes: byte[]) (sequencials: Stack<Sequencials>) (values: List<Value>) =
             if bytes.Length >= 2 then
                 let length = int(bytes.[1])
                 if bytes.Length - 2 >= length then
@@ -88,7 +92,7 @@ module Unpacker =
             else
                 MessagePackException("Attempt to unpack with non-compatible type") |> raise
 
-        let _unpackBin16 (bytes: byte[]) (sequencials: Sequencials list) (values: Value list) =
+        let _unpackBin16 (bytes: byte[]) (sequencials: Stack<Sequencials>) (values: List<Value>) =
             if bytes.Length >= 3 then
                 let length = int(bytes.[1]) * 256 +
                              int(bytes.[2])
@@ -101,7 +105,7 @@ module Unpacker =
             else
                 MessagePackException("Attempt to unpack with non-compatible type") |> raise
 
-        let _unpackBin32 (bytes: byte[]) (sequencials: Sequencials list) (values: Value list) =
+        let _unpackBin32 (bytes: byte[]) (sequencials: Stack<Sequencials>) (values: List<Value>) =
             if bytes.Length >= 5 then
                 let length = int(bytes.[1]) * 16777216 +
                              int(bytes.[2]) * 65536 +
@@ -116,7 +120,7 @@ module Unpacker =
             else
                 MessagePackException("Attempt to unpack with non-compatible type") |> raise
 
-        let _unpackExt8 (bytes: byte[]) (sequencials: Sequencials list) (values: Value list) =
+        let _unpackExt8 (bytes: byte[]) (sequencials: Stack<Sequencials>) (values: List<Value>) =
             if bytes.Length >= 3 then
                 let length = int(bytes.[1])
                 if bytes.Length - 3 >= length then
@@ -129,7 +133,7 @@ module Unpacker =
             else
                 MessagePackException("Attempt to unpack with non-compatible type") |> raise
 
-        let _unpackExt16 (bytes: byte[]) (sequencials: Sequencials list) (values: Value list) =
+        let _unpackExt16 (bytes: byte[]) (sequencials: Stack<Sequencials>) (values: List<Value>) =
             if bytes.Length >= 4 then
                 let length = int(bytes.[1]) * 256 +
                              int(bytes.[2])
@@ -143,7 +147,7 @@ module Unpacker =
             else
                 MessagePackException("Attempt to unpack with non-compatible type") |> raise
 
-        let _unpackExt32 (bytes: byte[]) (sequencials: Sequencials list) (values: Value list) =
+        let _unpackExt32 (bytes: byte[]) (sequencials: Stack<Sequencials>) (values: List<Value>) =
             if bytes.Length >= 6 then
                 let length = int(bytes.[1]) * 16777216 +
                              int(bytes.[2]) * 65536 +
@@ -159,7 +163,7 @@ module Unpacker =
             else
                 MessagePackException("Attempt to unpack with non-compatible type") |> raise
 
-        let _unpackFloat32 (bytes: byte[]) (sequencials: Sequencials list) (values: Value list) =
+        let _unpackFloat32 (bytes: byte[]) (sequencials: Stack<Sequencials>) (values: List<Value>) =
             if bytes.Length >= 5 then
                 let newValue = Utility.convertEndianFromBytesToFloat32(bytes.[1..4]) |> Value.Float32
                 let ars, vs = appendValue newValue sequencials values
@@ -167,7 +171,7 @@ module Unpacker =
             else
                 MessagePackException("Attempt to unpack with non-compativle type") |> raise
 
-        let _unpackFloat64 (bytes: byte[]) (sequencials: Sequencials list) (values: Value list) =
+        let _unpackFloat64 (bytes: byte[]) (sequencials: Stack<Sequencials>) (values: List<Value>) =
             if bytes.Length >= 9 then
                 let newValue = Utility.convertEndianFromBytesToFloat(bytes.[1..8]) |> Value.Float64
                 let ars, vs = appendValue newValue sequencials values
@@ -175,7 +179,7 @@ module Unpacker =
             else
                 MessagePackException("Attempt to unpack with non-compativle type") |> raise
 
-        let _unpackUInt8 (bytes: byte[]) (sequencials: Sequencials list) (values: Value list) =
+        let _unpackUInt8 (bytes: byte[]) (sequencials: Stack<Sequencials>) (values: List<Value>) =
             if bytes.Length >= 2 then
                 let newValue = Value.UInt8 bytes.[1]
                 let ars, vs = appendValue newValue sequencials values
@@ -183,7 +187,7 @@ module Unpacker =
             else
                 MessagePackException("Attempt to unpack with non-compativle type") |> raise
 
-        let _unpackUInt16 (bytes: byte[]) (sequencials: Sequencials list) (values: Value list) =
+        let _unpackUInt16 (bytes: byte[]) (sequencials: Stack<Sequencials>) (values: List<Value>) =
             if bytes.Length >= 3 then
                 let newValue = uint16(bytes.[1]) * 256us +
                                uint16(bytes.[2])
@@ -193,7 +197,7 @@ module Unpacker =
             else
                 MessagePackException("Attempt to unpack with non-compativle type") |> raise
 
-        let _unpackUInt32 (bytes: byte[]) (sequencials: Sequencials list) (values: Value list) =
+        let _unpackUInt32 (bytes: byte[]) (sequencials: Stack<Sequencials>) (values: List<Value>) =
             if bytes.Length >= 5 then
                 let newValue = uint32(bytes.[1]) * 16777216u +
                                uint32(bytes.[2]) * 65536u +
@@ -205,7 +209,7 @@ module Unpacker =
             else
                 MessagePackException("Attempt to unpack with non-compativle type") |> raise
 
-        let _unpackUInt64 (bytes: byte[]) (sequencials: Sequencials list) (values: Value list) =
+        let _unpackUInt64 (bytes: byte[]) (sequencials: Stack<Sequencials>) (values: List<Value>) =
             if bytes.Length >= 9 then
                 let newValue =
                     uint64(bytes.[1]) * 72057594037927936UL +
@@ -222,7 +226,7 @@ module Unpacker =
             else
                 MessagePackException("Attempt to unpack with non-compativle type") |> raise
 
-        let _unpackInt8 (bytes: byte[]) (sequencials: Sequencials list) (values: Value list) =
+        let _unpackInt8 (bytes: byte[]) (sequencials: Stack<Sequencials>) (values: List<Value>) =
             if bytes.Length >= 2 then
                 let newValue = sbyte(bytes.[1]) |> Value.Int8
                 let ars, vs = appendValue newValue sequencials values
@@ -230,7 +234,7 @@ module Unpacker =
             else
                 MessagePackException("Attempt to unpack with non-compativle type") |> raise
 
-        let _unpackInt16 (bytes: byte[]) (sequencials: Sequencials list) (values: Value list) =
+        let _unpackInt16 (bytes: byte[]) (sequencials: Stack<Sequencials>) (values: List<Value>) =
             if bs.Length >= 3 then
                 let newValue = uint16(bytes.[1]) * 256us +
                                uint16(bytes.[2])
@@ -240,7 +244,7 @@ module Unpacker =
             else
                 MessagePackException("Attempt to unpack with non-compativle type") |> raise
 
-        let _unpackInt32 (bytes: byte[]) (sequencials: Sequencials list) (values: Value list) =
+        let _unpackInt32 (bytes: byte[]) (sequencials: Stack<Sequencials>) (values: List<Value>) =
             if bytes.Length >= 5 then
                 let newValue = uint32(bytes.[1]) * 16777216u +
                                uint32(bytes.[2]) * 65536u +
@@ -252,7 +256,7 @@ module Unpacker =
             else
                 MessagePackException("Attempt to unpack with non-compativle type") |> raise
 
-        let _unpackInt64 (bytes: byte[]) (sequencials: Sequencials list) (values: Value list) =
+        let _unpackInt64 (bytes: byte[]) (sequencials: Stack<Sequencials>) (values: List<Value>) =
             if bytes.Length >= 9 then
                 let newValue =
                     uint64(bytes.[1]) * 72057594037927936UL +
@@ -269,7 +273,7 @@ module Unpacker =
             else
                 MessagePackException("Attempt to unpack with non-compativle type") |> raise
 
-        let _unpackFixExt1 (bytes: byte[]) (sequencials: Sequencials list) (values: Value list) =
+        let _unpackFixExt1 (bytes: byte[]) (sequencials: Stack<Sequencials>) (values: List<Value>) =
             if bytes.Length >= 3 then
                 let t = sbyte(bytes.[1])
                 let d = [| bytes.[2] |]
@@ -278,7 +282,7 @@ module Unpacker =
             else
                 MessagePackException("Attempt to unpack with non-compativle type") |> raise
 
-        let _unpackFixExt2 (bytes: byte[]) (sequencials: Sequencials list) (values: Value list) =
+        let _unpackFixExt2 (bytes: byte[]) (sequencials: Stack<Sequencials>) (values: List<Value>) =
             if bytes.Length >= 4 then
                 let t = sbyte(bytes.[1])
                 let d = bytes.[2..3]
@@ -287,7 +291,7 @@ module Unpacker =
             else
                 MessagePackException("Attempt to unpack with non-compativle type") |> raise
 
-        let _unpackFixExt4 (bytes: byte[]) (sequencials: Sequencials list) (values: Value list) =
+        let _unpackFixExt4 (bytes: byte[]) (sequencials: Stack<Sequencials>) (values: List<Value>) =
             if bytes.Length >= 6 then
                 let t = sbyte(bytes.[1])
                 let d = bytes.[2..5]
@@ -296,7 +300,7 @@ module Unpacker =
             else
                 MessagePackException("Attempt to unpack with non-compativle type") |> raise
 
-        let _unpackFixExt8 (bytes: byte[]) (sequencials: Sequencials list) (values: Value list) =
+        let _unpackFixExt8 (bytes: byte[]) (sequencials: Stack<Sequencials>) (values: List<Value>) =
             if bytes.Length >= 10 then
                 let t = sbyte(bytes.[1])
                 let d = bytes.[2..9]
@@ -305,7 +309,7 @@ module Unpacker =
             else
                 MessagePackException("Attempt to unpack with non-compativle type") |> raise
 
-        let _unpackFixExt16 (bytes: byte[]) (sequencials: Sequencials list) (values: Value list) =
+        let _unpackFixExt16 (bytes: byte[]) (sequencials: Stack<Sequencials>) (values: List<Value>) =
             if bytes.Length >= 18 then
                 let t = sbyte(bytes.[1])
                 let d = bytes.[2..17]
@@ -314,7 +318,7 @@ module Unpacker =
             else
                 MessagePackException("Attempt to unpack with non-compativle type") |> raise
 
-        let _unpackStr8 (bytes: byte[]) (sequencials: Sequencials list) (values: Value list) =
+        let _unpackStr8 (bytes: byte[]) (sequencials: Stack<Sequencials>) (values: List<Value>) =
             if bytes.Length >= 2 then
                 let length = int(bytes.[1])
                 if bytes.Length - 2 >= length then
@@ -326,7 +330,7 @@ module Unpacker =
             else
                 MessagePackException("Attempt to unpack with non-compativle type") |> raise
 
-        let _unpackStr16 (bytes: byte[]) (sequencials: Sequencials list) (values: Value list) =
+        let _unpackStr16 (bytes: byte[]) (sequencials: Stack<Sequencials>) (values: List<Value>) =
             if bytes.Length >= 3 then
                 let length = int(bytes.[1]) * 256 +
                              int(bytes.[2])
@@ -339,7 +343,7 @@ module Unpacker =
             else
                 MessagePackException("Attempt to unpack with non-compativle type") |> raise
 
-        let _unpackStr32 (bytes: byte[]) (sequencials: Sequencials list) (values: Value list) =
+        let _unpackStr32 (bytes: byte[]) (sequencials: Stack<Sequencials>) (values: List<Value>) =
             if bytes.Length >= 5 then
                 let length = int(bytes.[1]) * 16777216 +
                              int(bytes.[2]) * 65536 +
@@ -354,61 +358,65 @@ module Unpacker =
             else
                 MessagePackException("Attempt to unpack with non-compativle type") |> raise
 
-        let _unpackArray16 (bytes: byte[]) (sequencials: Sequencials list) =
+        let _unpackArray16 (bytes: byte[]) (sequencials: Stack<Sequencials>) =
             if bytes.Length >= 3 then
                 let length = int(bytes.[1]) * 256 +
                              int(bytes.[2])
                 if bytes.Length - 3 >= length then
-                    bytes.[3..], (ArrayStore(length, Array.init length (fun _ -> Value.Nil)))::sequencials
+                    sequencials.Push(ArrayStore(length, Array.init length (fun _ -> Value.Nil)))
+                    bytes.[3..], sequencials
                 else
                     MessagePackException("Attempt to unpack with non-compatible type") |> raise
             else
                 MessagePackException("Attempt to unpack with non-compativle type") |> raise
 
-        let _unpackArray32 (bytes: byte[]) (sequencials: Sequencials list) =
+        let _unpackArray32 (bytes: byte[]) (sequencials: Stack<Sequencials>) =
             if bytes.Length >= 5 then
                 let length = int(bytes.[1]) * 16777216 +
                              int(bytes.[2]) * 65536 +
                              int(bytes.[3]) * 256 +
                              int(bytes.[4])
                 if bytes.Length - 5 >= length then
-                    bytes.[5..], (ArrayStore(length, Array.init length (fun _ -> Value.Nil)))::sequencials
+                    sequencials.Push(ArrayStore(length, Array.init length (fun _ -> Value.Nil)))
+                    bytes.[5..], sequencials
                 else
                     MessagePackException("Attempt to unpack with non-compatible type") |> raise
             else
                 MessagePackException("Attempt to unpack with non-compativle type") |> raise
 
-        let _unpackMap16 (bytes: byte[]) (sequencials: Sequencials list) =
+        let _unpackMap16 (bytes: byte[]) (sequencials: Stack<Sequencials>) =
             if bytes.Length >= 3 then
                 let length = int(bytes.[1]) * 256 +
                              int(bytes.[2])
                 if bytes.Length - 3 >= length * 2 then
-                    bytes.[3..], (MapStore(length, Value.Nil, Map.ofList []))::sequencials
+                    sequencials.Push(MapStore(length, Value.Nil, Map.ofList []))
+                    bytes.[3..], sequencials
                 else
                     MessagePackException("Attempt to unpack with non-compatible type") |> raise
             else
                 MessagePackException("Attempt to unpack with non-compativle type") |> raise
 
-        let _unpackMap32 (bytes: byte[]) (sequencials: Sequencials list) =
+        let _unpackMap32 (bytes: byte[]) (sequencials: Stack<Sequencials>) =
             if bytes.Length >= 5 then
                 let length = int(bytes.[1]) * 16777216 +
                              int(bytes.[2]) * 65536 +
                              int(bytes.[3]) * 256 +
                              int(bytes.[4])
                 if bytes.Length - 5 >= length * 2 then
-                    bytes.[5..], (MapStore(length, Value.Nil, Map.ofList []))::sequencials
+                    sequencials.Push(MapStore(length, Value.Nil, Map.ofList []))
+                    bytes.[5..], sequencials
                 else
                     MessagePackException("Attempt to unpack with non-compatible type") |> raise
             else
                 MessagePackException("Attempt to unpack with non-compativle type") |> raise
 
-        let _unpackNegativeFixint (bytes: byte[]) (sequencials: Sequencials list) (values: Value list) =
+        let _unpackNegativeFixint (bytes: byte[]) (sequencials: Stack<Sequencials>) (values: List<Value>) =
             let newValue = sbyte(bytes.[0]) |> Value.Int8
             let ars, vs = appendValue newValue sequencials values
             bytes.[1..], ars, vs
 
-        let rec _unpack (bs: byte[]) (sequencials: Sequencials list) (values: Value list) =
-            if bs.Length = 0 then values
+        let rec _unpack (bs: byte[]) (sequencials: Stack<Sequencials>) (values: List<Value>) =
+            if bs.Length = 0 then values.ToArray()
             else
                 let header = bs.[0]
                 if (header &&& 0b10000000uy) = 0uy then
@@ -520,5 +528,5 @@ module Unpacker =
                     _unpackNegativeFixint bs sequencials values
                     |||> _unpack
                 else
-                    List.rev values
-        _unpack bs [] []
+                    values.ToArray()
+        _unpack bs (Stack()) (List(bs.Length/2))
