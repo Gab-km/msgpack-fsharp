@@ -541,4 +541,4 @@ module WhenUsingPackExt =
 module WhenUsingPacker =
     [<Test>]
     let ``Should return 0x01C403000102 with passing [Value.UInt8 1; Value.Bin [0x00; 0x01; 0x02]]`` () =
-        [Value.UInt8 1uy; Value.Bin [| 0x00uy; 0x01uy; 0x02uy |]] |> Packer.pack |> assertEquivalentTo [| 0x01uy; 0xC4uy; 0x03uy; 0x00uy; 0x01uy; 0x02uy |]
+        [|Value.UInt8 1uy; Value.Bin [| 0x00uy; 0x01uy; 0x02uy |] |] |> Packer.pack |> assertEquivalentTo [| 0x01uy; 0xC4uy; 0x03uy; 0x00uy; 0x01uy; 0x02uy |]

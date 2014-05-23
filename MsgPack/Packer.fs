@@ -295,4 +295,4 @@ module Packer =
         | Value.Ext (i, b) -> packExt i b
 
     [<CompiledName("Pack")>]
-    let pack (values: Value list) = values |> List.map packOne |> Array.concat
+    let pack (values: Value []) = values |> Array.map packOne |> Array.concat
