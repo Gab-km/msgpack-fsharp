@@ -49,6 +49,7 @@
     <Reference Include="System.Numerics" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="Extensions.fs" />
     <Compile Include="PackerTest.fs" />
     <Compile Include="UnpackerTest.fs" />
   </ItemGroup>

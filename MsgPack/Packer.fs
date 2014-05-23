@@ -242,7 +242,6 @@ module Packer =
 
     [<CompiledName("PackOne")>]
     let rec packOne = function
-        //TODO: change signature to seq<Value> -> byte[]
         | Value.Nil -> packNil()
         | Value.Bool b -> packBool b
         | Value.Float32 f -> packFloat32 f

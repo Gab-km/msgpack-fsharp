@@ -35,9 +35,8 @@ type Value =
         | Int32 (i) -> "Int32 " + (i.ToString())
         | Int64 (i) -> "Int64 " + (i.ToString())
         | String (s) -> "String " + s
-        | Bin (bs) -> sprintf "Bin of %d-length binary" bs.Length
-        | Array (ar) -> //sprintf "Array of %d-length Value array" ar.Length
-                        sprintf "%A" ar
+        | Bin (bs) -> sprintf "%A" bs
+        | Array (ar) -> sprintf "%A" ar
         | Map (m) -> "Map " + (m.ToString())
         | Ext (key, value) -> "Ext " + (key, value).ToString()
 
