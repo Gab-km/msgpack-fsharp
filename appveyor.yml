@@ -1,0 +1,7 @@
+branches:
+  except:
+    - gh-pages
+
+test:
+  assemblies:
+    - MsgPack.Test.dll
