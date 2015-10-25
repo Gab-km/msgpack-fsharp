@@ -17,8 +17,9 @@ module Unpacker =
     [<CompiledName("Unpack")>]
     let unpack (bs:byte[]) =
         let bs=Bytes(bs)
-        let sw=System.Diagnostics.Stopwatch.StartNew()
         let raiseMessagePackException () = MessagePackException("Attempt to unpack with non-compatible type") |> raise
+
+        let toUTF8Str (bytes:byte[])=System.Text.Encoding.UTF8.GetString(bytes,0,bytes.Length)
 
         let appendValue (newValue: Value) (sequencials: Stack<Sequencials>) (values: List<Value>) =
             let mutable nv, doLoop = newValue, true
@@ -73,7 +74,8 @@ module Unpacker =
         let _unpackFixstr (bytes: Bytes) (sequencials: Stack<Sequencials>) (values: List<Value>) =
             let length = int(bytes.[0] &&& 0b00011111uy)
             if bytes.Length - 1 >= length then
-                let newValue = System.Text.Encoding.UTF8.GetString(bytes.Dice(1,length)) |> Value.String
+//                let newValue = System.Text.Encoding.UTF8.GetString(withStartCnt<|bytes.Dice(1,length)) |> Value.String
+                let newValue = toUTF8Str(bytes.Dice(1,length)) |> Value.String
                 let ars, vs = appendValue newValue sequencials values
                 bytes.IncInd (length+1), ars, vs
             else
@@ -333,7 +335,8 @@ module Unpacker =
             if bytes.Length >= 2 then
                 let length = int(bytes.[1])
                 if bytes.Length - 2 >= length then
-                    let newValue = System.Text.Encoding.UTF8.GetString(bytes.Dice(2,length+1)) |> Value.String
+//                    let newValue = System.Text.Encoding.UTF8.GetString(withStartCnt<|bytes.Dice(2,length+1)) |> Value.String
+                    let newValue = toUTF8Str(bytes.Dice(2,length+1)) |> Value.String
                     let ars, vs = appendValue newValue sequencials values
                     bytes.IncInd (length+2), ars, vs
                 else
@@ -346,7 +349,8 @@ module Unpacker =
                 let length = int(bytes.[1]) * 256 +
                              int(bytes.[2])
                 if bytes.Length - 3 >= length then
-                    let newValue = System.Text.Encoding.UTF8.GetString(bytes.Dice(3,length+2)) |> Value.String
+//                    let newValue = System.Text.Encoding.UTF8.GetString(withStartCnt<|bytes.Dice(3,length+2)) |> Value.String
+                    let newValue = toUTF8Str(bytes.Dice(3,length+2)) |> Value.String
                     let ars, vs = appendValue newValue sequencials values
                     bytes.IncInd (length+3), ars, vs
                 else
@@ -361,7 +365,8 @@ module Unpacker =
                              int(bytes.[3]) * 256 +
                              int(bytes.[4])
                 if bytes.Length - 5 >= length then
-                    let newValue = System.Text.Encoding.UTF8.GetString(bytes.Dice(5,length+4)) |> Value.String
+//                    let newValue = System.Text.Encoding.UTF8.GetString(withStartCnt<|bytes.Dice(5,length+4)) |> Value.String
+                    let newValue = toUTF8Str(bytes.Dice(5,length+4)) |> Value.String
                     let ars, vs = appendValue newValue sequencials values
                     bytes.IncInd (length+5), ars, vs
                 else
