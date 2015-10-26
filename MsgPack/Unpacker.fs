@@ -440,112 +440,112 @@ module Unpacker =
                 let header = bs.[0]
                 //個々の戻り値いらなくなったので後で変えるべきだけど手を抜いてスルー
                 if (header &&& 0b10000000uy) = 0uy then
-                    _unpackPositiveFixint bs sequencials values
+                    _unpackPositiveFixint bs sequencials values|>ignore
                     _unpack()
                 elif (header &&& 0b11110000uy) = 0b10000000uy then
-                    _unpackFixmap bs sequencials
+                    _unpackFixmap bs sequencials|>ignore
                     _unpack()
                 elif (header &&& 0b11110000uy) = 0b10010000uy then
-                    _unpackFixarray bs sequencials
+                    _unpackFixarray bs sequencials|>ignore
                     _unpack()
                 elif (header &&& 0b11100000uy) = 0b10100000uy then
-                    _unpackFixstr bs sequencials values
+                    _unpackFixstr bs sequencials values|>ignore
                     _unpack()
                 elif (header = Format.Nil) then
-                    _unpackNil bs sequencials values
+                    _unpackNil bs sequencials values|>ignore
                     _unpack()
                 elif (header = Format.False) then
-                    _unpackFalse bs sequencials values
+                    _unpackFalse bs sequencials values|>ignore
                     _unpack()
                 elif (header = Format.True) then
-                    _unpackTrue bs sequencials values
+                    _unpackTrue bs sequencials values|>ignore
                     _unpack()
                 elif header = Format.Bin8 then
-                    _unpackBin8 bs sequencials values
+                    _unpackBin8 bs sequencials values|>ignore
                     _unpack()
                 elif header = Format.Bin16 then
-                    _unpackBin16 bs sequencials values
+                    _unpackBin16 bs sequencials values|>ignore
                     _unpack()
                 elif header = Format.Bin32 then
-                    _unpackBin32 bs sequencials values
+                    _unpackBin32 bs sequencials values|>ignore
                     _unpack()
                 elif header = Format.Ext8 then
-                    _unpackExt8 bs sequencials values
+                    _unpackExt8 bs sequencials values|>ignore
                     _unpack()
                 elif header = Format.Ext16 then
-                    _unpackExt16 bs sequencials values
+                    _unpackExt16 bs sequencials values|>ignore
                     _unpack()
                 elif header = Format.Ext32 then
-                    _unpackExt32 bs sequencials values
+                    _unpackExt32 bs sequencials values|>ignore
                     _unpack()
                 elif header = Format.Float32 then
-                    _unpackFloat32 bs sequencials values
+                    _unpackFloat32 bs sequencials values|>ignore
                     _unpack()
                 elif header = Format.Float64 then
-                    _unpackFloat64 bs sequencials values
+                    _unpackFloat64 bs sequencials values|>ignore
                     _unpack()
                 elif header = Format.UInt8 then
-                    _unpackUInt8 bs sequencials values
+                    _unpackUInt8 bs sequencials values|>ignore
                     _unpack()
                 elif header = Format.UInt16 then
-                    _unpackUInt16 bs sequencials values
+                    _unpackUInt16 bs sequencials values|>ignore
                     _unpack()
                 elif header = Format.UInt32 then
-                    _unpackUInt32 bs sequencials values
+                    _unpackUInt32 bs sequencials values|>ignore
                     _unpack()
                 elif header = Format.UInt64 then
-                    _unpackUInt64 bs sequencials values
+                    _unpackUInt64 bs sequencials values|>ignore
                     _unpack()
                 elif header = Format.Int8 then
-                    _unpackInt8 bs sequencials values
+                    _unpackInt8 bs sequencials values|>ignore
                     _unpack()
                 elif header = Format.Int16 then
-                    _unpackInt16 bs sequencials values
+                    _unpackInt16 bs sequencials values|>ignore
                     _unpack()
                 elif header = Format.Int32 then
-                    _unpackInt32 bs sequencials values
+                    _unpackInt32 bs sequencials values|>ignore
                     _unpack()
                 elif header = Format.Int64 then
-                    _unpackInt64 bs sequencials values
+                    _unpackInt64 bs sequencials values|>ignore
                     _unpack()
                 elif header = Format.FixExt1 then
-                    _unpackFixExt1 bs sequencials values
+                    _unpackFixExt1 bs sequencials values|>ignore
                     _unpack()
                 elif header = Format.FixExt2 then
-                    _unpackFixExt2 bs sequencials values
+                    _unpackFixExt2 bs sequencials values|>ignore
                     _unpack()
                 elif header = Format.FixExt4 then
-                    _unpackFixExt4 bs sequencials values
+                    _unpackFixExt4 bs sequencials values|>ignore
                     _unpack()
                 elif header = Format.FixExt8 then
-                    _unpackFixExt8 bs sequencials values
+                    _unpackFixExt8 bs sequencials values|>ignore
                     _unpack()
                 elif header = Format.FixExt16 then
-                    _unpackFixExt16 bs sequencials values
+                    _unpackFixExt16 bs sequencials values|>ignore
                     _unpack()
                 elif header = Format.Str8 then
-                    _unpackStr8 bs sequencials values
+                    _unpackStr8 bs sequencials values|>ignore
                     _unpack()
                 elif header = Format.Str16 then
-                    _unpackStr16 bs sequencials values
+                    _unpackStr16 bs sequencials values|>ignore
                     _unpack()
                 elif header = Format.Str32 then
-                    _unpackStr32 bs sequencials values
+                    _unpackStr32 bs sequencials values|>ignore
                     _unpack()
                 elif header = Format.Array16 then
-                    _unpackArray16 bs sequencials
+                    _unpackArray16 bs sequencials|>ignore
                     _unpack()
                 elif header = Format.Array32 then
-                    _unpackArray32 bs sequencials
+                    _unpackArray32 bs sequencials|>ignore
                     _unpack()
                 elif header = Format.Map16 then
-                    _unpackMap16 bs sequencials
+                    _unpackMap16 bs sequencials|>ignore
                     _unpack()
                 elif header = Format.Map32 then
-                    _unpackMap32 bs sequencials
+                    _unpackMap32 bs sequencials|>ignore
                     _unpack()
                 elif (header &&& 0b11100000uy) = 0b11100000uy then
-                    _unpackNegativeFixint bs sequencials values
+                    _unpackNegativeFixint bs sequencials values|>ignore
                     _unpack()
                 else
                     ()
